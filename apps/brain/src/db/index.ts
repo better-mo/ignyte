@@ -7,6 +7,12 @@ PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
+-- Gmail message ids already fetched, so an interrupted sync resumes where it stopped.
+CREATE TABLE IF NOT EXISTS gmail_seen (
+  account_id TEXT NOT NULL, message_id TEXT NOT NULL,
+  PRIMARY KEY (account_id, message_id)
+);
+
 -- Connected accounts (one row per Google account, X account, ...).
 CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,

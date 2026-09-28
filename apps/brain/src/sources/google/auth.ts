@@ -211,7 +211,19 @@ async function accessToken(account: GoogleAccount): Promise<string> {
   return t.access_token;
 }
 
-/** GET a Google API JSON endpoint with auth, retries on 429/5xx. */
+// Gmail allows ~6000 quota units/min/user (a message read costs 5), so ~20 reads/s.
+// Every call for one account waits for its slot; a rate-limit reply pauses the whole account.
+const MAX_RPS = Number(process.env.GOOGLE_MAX_RPS ?? 12);
+const nextSlot = new Map<string, number>();
+
+async function throttle(accountId: string) {
+  const now = Date.now();
+  const slot = Math.max(now, nextSlot.get(accountId) ?? 0);
+  nextSlot.set(accountId, slot + 1000 / MAX_RPS);
+  if (slot > now) await new Promise((r) => setTimeout(r, slot - now));
+}
+
+/** GET a Google API JSON endpoint with auth, pacing, and retries on rate limits / 5xx. */
 export async function gget<T>(
   account: GoogleAccount,
   url: string,
@@ -224,25 +236,31 @@ export async function gget<T>(
       u.searchParams.append(k, item);
   }
   for (let attempt = 0; ; attempt++) {
+    await throttle(account.id);
     const res = await fetch(u, {
       headers: { authorization: `Bearer ${await accessToken(account)}` },
     });
     if (res.ok) return (await res.json()) as T;
-    if (
-      (res.status === 429 || res.status >= 500 || res.status === 403) &&
-      attempt < 5
-    ) {
-      const body = await res.text();
-      if (res.status === 403 && !/rate|quota/i.test(body))
-        throw new Error(`Google API 403 ${u.pathname}: ${body}`);
-      await new Promise((r) =>
-        setTimeout(r, 2 ** attempt * 1000 + Math.random() * 500),
-      );
+    const body = await res.text();
+    const rateLimited =
+      res.status === 429 || (res.status === 403 && /rate|quota/i.test(body));
+    if ((rateLimited || res.status >= 500) && attempt < 8) {
+      const retryAfter = Number(res.headers.get("retry-after")) * 1000;
+      const wait =
+        retryAfter ||
+        Math.min(60_000, 2 ** attempt * 2000) + Math.random() * 1000;
+      if (rateLimited) {
+        // Back off every worker for this account, not just this request.
+        nextSlot.set(
+          account.id,
+          Math.max(nextSlot.get(account.id) ?? 0, Date.now() + wait),
+        );
+      } else {
+        await new Promise((r) => setTimeout(r, wait));
+      }
       continue;
     }
-    throw new Error(
-      `Google API ${res.status} ${u.pathname}: ${await res.text()}`,
-    );
+    throw new Error(`Google API ${res.status} ${u.pathname}: ${body}`);
   }
 }
 

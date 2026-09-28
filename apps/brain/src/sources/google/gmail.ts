@@ -1,5 +1,5 @@
 import { config } from "../../config.ts";
-import { run, tx } from "../../db/index.ts";
+import { all, run, tx } from "../../db/index.ts";
 import {
   hash,
   looksAutomated,
@@ -195,36 +195,61 @@ export async function syncGmail(
     log(`  gmail ${account.email}: listed ${ids.length} messages`);
   } while (pageToken && ids.length < maxMessages);
 
+  // Skip messages an earlier (possibly interrupted) run already fetched.
+  const seen = new Set(
+    all<{ message_id: string }>(
+      "SELECT message_id FROM gmail_seen WHERE account_id = ?",
+      account.id,
+    ).map((r) => r.message_id),
+  );
+  const todo = ids.slice(0, maxMessages).filter((id) => !seen.has(id));
+  if (todo.length < ids.length)
+    log(
+      `  gmail ${account.email}: ${ids.length - todo.length} already synced, ${todo.length} to fetch`,
+    );
+
   let done = 0;
   let newest = state.gmailAfter ?? 0;
   const communities = new Map<string, string>();
   const batch: Interaction[] = [];
+  const fetched: string[] = [];
   const flush = () =>
     tx(() => {
       for (const it of batch.splice(0)) saveInteraction(it);
+      for (const id of fetched.splice(0))
+        run(
+          "INSERT OR IGNORE INTO gmail_seen (account_id, message_id) VALUES (?, ?)",
+          account.id,
+          id,
+        );
     });
 
-  await pool(ids.slice(0, maxMessages), 10, async (id) => {
-    const msg = await gget<GmailMessage>(account, `${API}/messages/${id}`, {
-      format: "metadata",
-      metadataHeaders: HEADERS,
+  try {
+    await pool(todo, 8, async (id) => {
+      const msg = await gget<GmailMessage>(account, `${API}/messages/${id}`, {
+        format: "metadata",
+        metadataHeaders: HEADERS,
+      });
+      const it = mapGmailMessage(msg, account, mine);
+      if (it) {
+        batch.push(it);
+        if (it.communityId)
+          communities.set(
+            it.communityId,
+            String(it.meta?.listName ?? it.communityId),
+          );
+      }
+      fetched.push(id);
+      newest = Math.max(newest, Math.floor(Number(msg.internalDate) / 1000));
+      if (++done % 200 === 0) {
+        flush();
+        log(`  gmail ${account.email}: ${done}/${todo.length}`);
+      }
     });
-    const it = mapGmailMessage(msg, account, mine);
-    if (it) {
-      batch.push(it);
-      if (it.communityId)
-        communities.set(
-          it.communityId,
-          String(it.meta?.listName ?? it.communityId),
-        );
-    }
-    newest = Math.max(newest, Math.floor(Number(msg.internalDate) / 1000));
-    if (++done % 200 === 0) {
-      flush();
-      log(`  gmail ${account.email}: ${done}/${ids.length}`);
-    }
-  });
-  flush();
+  } finally {
+    // Keep whatever was fetched even if the run dies, so the next sync resumes.
+    flush();
+  }
 
   for (const [id, name] of communities) {
     run(
