@@ -237,9 +237,19 @@ export async function gget<T>(
   }
   for (let attempt = 0; ; attempt++) {
     await throttle(account.id);
-    const res = await fetch(u, {
-      headers: { authorization: `Bearer ${await accessToken(account)}` },
-    });
+    let res: Response;
+    try {
+      res = await fetch(u, {
+        headers: { authorization: `Bearer ${await accessToken(account)}` },
+      });
+    } catch (err) {
+      // Network drop (Wi-Fi, sleep, DNS): back off and retry rather than abort the sync.
+      if (attempt >= 8) throw err;
+      await new Promise((r) =>
+        setTimeout(r, Math.min(60_000, 2 ** attempt * 2000)),
+      );
+      continue;
+    }
     if (res.ok) return (await res.json()) as T;
     const body = await res.text();
     const rateLimited =
