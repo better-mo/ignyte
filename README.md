@@ -1,5 +1,7 @@
 # Ignyte — Your people, closer.
 
+> **Looking for the working personal MVP?** [`apps/brain`](apps/brain/README.md) is a real, local People Brain. It connects Gmail (multiple accounts), Google Contacts and Calendar, LinkedIn, X, phone contacts and communities, then resolves identities, enriches profiles and builds an evidence-backed relationship graph. You can talk to it with Claude in a local web app, the terminal, or over MCP. The rest of this README covers the UI-only design prototype in `apps/web`.
+
 A complete, responsive, UI-only consumer prototype of a private **People Brain**. It tells the story from first setup to a growing personal graph, warm introductions, daily context, and a permissioned connection to the user's own AI.
 
 **All people, profiles, evidence, source connections, counts, and agent answers are fictional demo fixtures.** No Google sign-in, uploaded files, recording, external messaging, real model calls, database, or MCP server is implemented. Prototype interactions live in browser memory and reset on reload. Portraits use remote placeholder images with initials as a fallback; fonts are bundled locally.

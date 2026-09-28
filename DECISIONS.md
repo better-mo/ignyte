@@ -19,3 +19,14 @@
 3. Habit: briefs, nudge actions and sample voice capture with person confirmation.
 4. Complete journey: onboarding, source/import states, graph growth, AI permission and chat flows, privacy.
 5. Verification: production build, browser journeys, mobile overflow, deployment and handoff.
+
+## Personal People Brain MVP (`apps/brain`)
+
+- Scope: a single-user, local tool that runs on real data, separate from the static `apps/web` prototype so the Vercel build is untouched.
+- Storage: one SQLite file via Node's built-in `node:sqlite` (FTS5 for search). No database server and no native dependencies.
+- Sources: Gmail/Contacts/Calendar via your own Desktop OAuth client (multiple accounts); LinkedIn, X and phone via their official data exports; communities from Gmail `List-Id` plus CSV imports until direct connectors exist.
+- People are promoted from email only on two-way signal (you wrote, they replied, you met, they post to your list), which keeps newsletters and cold inbound out.
+- Enrichment: People Data Labs by default (billed per match, dated work history powers "worked together" edges), Apollo as the alternative; strongest ties first, once per 180 days.
+- Retrieval: structured graph tools do the precise work; FTS5 with optional Voyage embeddings handles fuzzy asks. Claude (`claude-opus-5`, adaptive thinking, server-side refusal fallback) calls 12 tools and ends with a `present` card for the UI.
+- The same tools run over MCP (stdio) for Claude Desktop and Claude Code.
+- Community membership is context, never proof of a relationship, in scoring, paths and answers.

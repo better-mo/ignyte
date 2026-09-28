@@ -1,0 +1,5 @@
+CONVERSATION ID,CONVERSATION TITLE,FROM,SENDER PROFILE URL,TO,RECIPIENT PROFILE URLS,DATE,SUBJECT,CONTENT,FOLDER,ATTACHMENTS
+conv-maya,,Maya Williams,https://www.linkedin.com/in/mayawilliams,Mo Example,https://www.linkedin.com/in/mo-example,2026-08-30 17:02:11 UTC,,"Hey! Quick update: I'm winding Forma down and exploring product roles — ideally PM at an early-stage company. Would love your take.",INBOX,
+conv-maya,,Mo Example,https://www.linkedin.com/in/mo-example,Maya Williams,https://www.linkedin.com/in/mayawilliams,2026-08-31 09:15:40 UTC,,"Congrats on everything you built. Let me think about who's hiring — will come back to you.",SENT,
+conv-tom,,Tom Becker,https://www.linkedin.com/in/tombecker-vc,Mo Example,https://www.linkedin.com/in/mo-example,2026-05-02 12:00:00 UTC,,"Great meeting you at the founder dinner. Keep me posted on Ignyte.",INBOX,
+conv-tom,,Mo Example,https://www.linkedin.com/in/mo-example,Tom Becker,https://www.linkedin.com/in/tombecker-vc,2026-05-03 08:00:00 UTC,,"Will do, thanks Tom!",SENT,

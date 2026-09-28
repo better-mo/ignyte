@@ -1,0 +1,1 @@
+window.YTD.follower.part0 = [ { "follower" : { "accountId" : "2001", "userLink" : "https://twitter.com/intent/user?user_id=2001" } }, { "follower" : { "accountId" : "2003", "userLink" : "https://twitter.com/intent/user?user_id=2003" } } ]

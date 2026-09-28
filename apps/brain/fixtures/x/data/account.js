@@ -1,0 +1,1 @@
+window.YTD.account.part0 = [ { "account" : { "email" : "mo@ignyte.dev", "createdVia" : "web", "username" : "moexample", "accountId" : "1000", "createdAt" : "2012-01-01T00:00:00.000Z", "accountDisplayName" : "Mo Example" } } ]
