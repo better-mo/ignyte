@@ -220,3 +220,48 @@ test("community digest authors link to people already in your network", async ()
     ),
   );
 });
+
+test("newsletters with a List-Id are not communities; real discussion lists are", async () => {
+  const { saveInteraction } = await import("../src/identity/store.ts");
+  const { rebuild } = await import("../src/pipeline.ts");
+  const mk = (id: string, list: string, from: string) =>
+    saveInteraction({
+      id,
+      source: "gmail",
+      accountId: "google:mo@ignyte.dev",
+      kind: "community_post",
+      occurredAt: new Date().toISOString(),
+      direction: "in",
+      subject: "Update",
+      communityId: `list:${list}`,
+      participants: [
+        {
+          handleKind: "email",
+          handle: from,
+          name: from.split("@")[0],
+          role: "from",
+        },
+      ],
+    });
+  for (let i = 0; i < 4; i++) mk(`n${i}`, "news.brand.com", "ceo@brand.com");
+  ["ana@a.com", "bo@b.com", "cy@c.com"].forEach((f, i) =>
+    mk(`d${i}`, "founders.googlegroups.com", f),
+  );
+  for (const id of ["list:news.brand.com", "list:founders.googlegroups.com"])
+    (await import("../src/db/index.ts")).run(
+      "INSERT OR IGNORE INTO communities (id, name, provider) VALUES (?, ?, 'email_list')",
+      id,
+      id.slice(5),
+    );
+  await rebuild(() => {}, { embed: false });
+  const names = all<{ name: string }>(
+    "SELECT name FROM communities WHERE provider = 'email_list'",
+  ).map((c) => c.name);
+  assert.ok(!names.includes("news.brand.com"));
+  assert.ok(names.includes("founders.googlegroups.com"));
+  assert.equal(
+    get("SELECT 1 FROM identifiers WHERE value = 'ceo@brand.com'"),
+    undefined,
+  );
+  assert.ok(get("SELECT 1 FROM identifiers WHERE value = 'ana@a.com'"));
+});

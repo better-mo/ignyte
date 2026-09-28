@@ -12,7 +12,63 @@ import {
  * you wrote to them, they replied in a thread you're part of, you met, or they
  * posted in a community mailing list you're on. Newsletters and cold inbound stay out.
  */
+/** A discussion list has several people posting; a newsletter has one or two senders. */
+const MIN_LIST_POSTERS = 3;
+
+/**
+ * Turn "lists" that are really newsletters/marketing (List-Id header, but only 1–2
+ * senders) back into bulk mail, and drop people who only existed because of them.
+ */
+export function demoteBroadcastLists(): number {
+  const broadcast = all<{ community_id: string }>(
+    `SELECT i.community_id FROM interactions i
+     LEFT JOIN participants pa ON pa.interaction_id = i.id AND pa.role = 'from'
+     WHERE i.community_id LIKE 'list:%'
+     GROUP BY i.community_id HAVING COUNT(DISTINCT pa.handle) < ?`,
+    MIN_LIST_POSTERS,
+  ).map((r) => r.community_id);
+  tx(() => {
+    for (const id of broadcast) {
+      run(
+        "UPDATE interactions SET kind = 'email', is_bulk = 1, community_id = NULL WHERE community_id = ?",
+        id,
+      );
+      run("DELETE FROM memberships WHERE community_id = ?", id);
+      run("DELETE FROM communities WHERE id = ?", id);
+    }
+    // People whose only record is "posted to a list" and who belong to no community.
+    const orphans = all<{ id: string }>(
+      `SELECT p.id FROM people p
+       WHERE p.is_me = 0
+         AND EXISTS (SELECT 1 FROM observations o WHERE o.person_id = p.id AND o.source = 'community' AND o.account_id = '')
+         AND NOT EXISTS (SELECT 1 FROM observations o WHERE o.person_id = p.id AND NOT (o.source = 'community' AND o.account_id = ''))
+         AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.person_id = p.id)`,
+    ).map((r) => r.id);
+    for (const id of orphans) {
+      run("UPDATE participants SET person_id = NULL WHERE person_id = ?", id);
+      for (const table of [
+        "identifiers",
+        "observations",
+        "employment",
+        "education",
+        "enrichments",
+        "notes",
+        "embeddings",
+        "people_fts",
+      ]) {
+        run(`DELETE FROM ${table} WHERE person_id = ?`, id);
+      }
+      run("DELETE FROM edges WHERE a = ? OR b = ?", id, id);
+      run("DELETE FROM people WHERE id = ?", id);
+    }
+  });
+  return broadcast.length;
+}
+
 export function promoteAddresses(log = console.log): number {
+  const demoted = demoteBroadcastLists();
+  if (demoted)
+    log(`  lists: ${demoted} newsletter-style lists treated as bulk mail`);
   linkParticipants();
   const mine = myEmails();
   const now = new Date().toISOString();
