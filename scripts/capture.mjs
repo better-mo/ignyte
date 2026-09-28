@@ -6,7 +6,7 @@ const page = await browser.newPage({
 });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-await page.goto(process.env.DEMO_URL || "http://127.0.0.1:4173");
+await page.goto(process.env.DEMO_URL || "http://127.0.0.1:4173/app/");
 await page.evaluate(() => document.fonts.ready);
 await page.screenshot({
   path: "../ignyte-desktop.png",

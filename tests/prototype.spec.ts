@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 test("the first-minute setup ends in a populated graph", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app/");
   await page.getByRole("button", { name: "Start setup", exact: true }).click();
   await page.getByRole("button", { name: "Continue with Google" }).click();
   await page
@@ -24,7 +24,7 @@ test("the first-minute setup ends in a populated graph", async ({ page }) => {
 test("warm paths show evidence, editable drafts, and an honest empty state", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/app/");
   await page
     .getByRole("button", { name: "Someone at Shopify", exact: true })
     .click();
@@ -51,7 +51,7 @@ test("warm paths show evidence, editable drafts, and an honest empty state", asy
 test("people filters, map, profiles and confirmed voice context", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/app/");
   await page.getByRole("button", { name: "Your people", exact: true }).click();
   await expect(page.locator(".person-row")).toHaveCount(50);
   await page.getByLabel("City", { exact: true }).selectOption("Toronto");
@@ -80,7 +80,7 @@ test("people filters, map, profiles and confirmed voice context", async ({
 test("agent approval, grounded response, note confirmation, privacy, and revocation", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/app/");
   await page
     .getByRole("button", { name: "Your people brain", exact: true })
     .click();
@@ -124,7 +124,7 @@ test("agent approval, grounded response, note confirmation, privacy, and revocat
   ).toBeVisible();
 });
 test("source import recovery and privacy reset", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app/");
   await page
     .getByRole("button", { name: "Connections & privacy", exact: true })
     .click();
@@ -159,7 +159,7 @@ test("source import recovery and privacy reset", async ({ page }) => {
 test("desktop visual and mobile navigation have no horizontal overflow", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/app/");
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: "../ignyte-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -188,7 +188,7 @@ test("desktop visual and mobile navigation have no horizontal overflow", async (
 test("agent access survives navigation and hidden people remain in your own graph", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/app/");
   await page
     .getByRole("button", { name: "Your people brain", exact: true })
     .click();

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -83,6 +83,21 @@ const nav = [
 ] as const;
 export default function Ignyte() {
   const [view, setView] = useState<View>("today");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("view");
+    if (
+      ["today", "people", "paths", "possibilities", "ai", "settings"].includes(
+        requested || "",
+      )
+    )
+      setView(requested as View);
+    if (params.get("setup") === "1") setSetup(true);
+    if (params.get("q")) {
+      setQuery(params.get("q")!);
+      setView("paths");
+    }
+  }, []);
   const [stage, setStage] = useState(1);
   const [modal, setModal] = useState<Modal>(null);
   const [setup, setSetup] = useState(false);
@@ -673,7 +688,7 @@ export default function Ignyte() {
           <span>
             <Spark small />A little more human.
           </span>
-          <span>Ignyte · Interactive prototype</span>
+          <a href="/">← Back to Ignyte · Interactive prototype</a>
         </footer>
       </main>
       {setup && (

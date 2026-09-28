@@ -13,7 +13,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. No environment variables, account credentials, or services are needed.
+Open http://localhost:3000 for the landing page, or http://localhost:3000/app/ for the complete consumer prototype. No environment variables, account credentials, or services are needed.
 
 ```sh
 npm run build
@@ -25,6 +25,21 @@ The production build exports a static site to `apps/web/out`. The explicit Webpa
 ```sh
 python3 -m http.server 4173 --directory apps/web/out
 ```
+
+## Landing page
+
+The public route `/` is a story-led marketing site. The prototype remains at `/app/`.
+
+- A people-map hero with three selectable opportunity previews.
+- A two-click **sample** setup: click the main CTA, then connect the sample Google account. A graph and one evidenced Shopify introduction appear without real sign-in.
+- Three switchable ChatGPT/Claude conversations: a dream role, first customers, and a work trip with familiar faces. Each answer has inspectable sample evidence.
+- Two in-Ignyte moments: introducing people across circles and preparing for coffee. Saved ideas are local to the page visit.
+- A sixth story: finding first-hand experience through a community. Named communities, shared-membership context, and source badges appear throughout the page.
+- A compact privacy disclosure and direct links into the appropriate prototype screens.
+
+All assistant conversations and community integrations are illustrative. The two-click claim explicitly describes the sample demo, not a production OAuth consent flow. Communities do not appear to come from Google alone in the initial reveal.
+
+Deep links: `/app/?q=Shopify`, `/app/?view=ai`, `/app/?view=people`, `/app/?view=settings`, and `/app/?setup=1`.
 
 ## Five-minute demo
 
@@ -54,6 +69,7 @@ A saved note remains in this browser session. No persistence or real integration
 ```text
 apps/web/app/              Entry point, global design tokens, responsive styles
 apps/web/components/      Today and core screens, onboarding, People Brain, UI primitives
+apps/web/components/landing/  Landing page, story illustrations, responsive styles
 apps/web/lib/demo.ts       User-scoped people, identities, relationship evidence, communities
 public/                   Reserved static asset directory
 tests/                   Browser journey verification
@@ -92,7 +108,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The tests exercise the complete onboarding, evidence-backed warm paths, honest empty search, people filters/map, voice confirmation, agent permissions/write confirmation/revocation, source import recovery, privacy reset, and mobile overflow. These validate the UI prototype, not unimplemented graph engines or access-control servers.
+The tests exercise landing-page stories, the two-click reveal, six responsive widths, deep links, the complete onboarding, evidence-backed warm paths, honest empty search, people filters/map, voice confirmation, agent permissions/write confirmation/revocation, source import recovery, privacy reset, and mobile overflow. These validate the UI prototype, not unimplemented graph engines or access-control servers.
 
 ## Deploy to Vercel
 

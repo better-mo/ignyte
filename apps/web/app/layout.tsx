@@ -7,9 +7,9 @@ import "@fontsource/instrument-serif/400.css";
 import "@fontsource/instrument-serif/400-italic.css";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Ignyte — Your people, closer.",
+  title: "Ignyte — Someone you know could change what happens next.",
   description:
-    "Your private people brain. A beautifully connected world, for you and your AI. Interactive design prototype.",
+    "Your next job. Your first customer. Someone who’s been there. Discover the possibilities in your people and communities—with Ignyte, ChatGPT, and Claude.",
 };
 export default function RootLayout({
   children,
