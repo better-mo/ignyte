@@ -297,3 +297,34 @@ test("gmail full payload: text/plain preferred, html fallback", async () => {
     "Hi there\n\nBye",
   );
 });
+
+test("pdl locked fields (true placeholders) are ignored", () => {
+  const p = mapPdl({
+    full_name: "Ann Lee",
+    job_title: true,
+    job_company_name: "Acme",
+    location_locality: true,
+    linkedin_url: true,
+    twitter_url: true,
+    skills: true,
+    emails: true,
+    work_email: true,
+    experience: [
+      {
+        company: { name: "Acme", website: true },
+        title: true,
+        start_date: "2020-01",
+        end_date: true,
+        is_primary: true,
+      },
+    ],
+    education: true,
+  });
+  assert.equal(p.title, undefined);
+  assert.equal(p.city, undefined);
+  assert.equal(p.linkedinUrl, undefined);
+  assert.equal(p.company, "Acme");
+  assert.deepEqual(p.positions, [
+    { company: "Acme", start: "2020-01", current: true },
+  ]);
+});

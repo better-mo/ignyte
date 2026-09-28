@@ -265,3 +265,28 @@ test("newsletters with a List-Id are not communities; real discussion lists are"
   );
   assert.ok(get("SELECT 1 FROM identifiers WHERE value = 'ana@a.com'"));
 });
+
+test("rebuild survives enrichment rows saved with locked-field placeholders", async () => {
+  const { run } = await import("../src/db/index.ts");
+  const { rebuild } = await import("../src/pipeline.ts");
+  const sara = get<{ id: string }>(
+    "SELECT id FROM people WHERE display_name = 'Sara Chen'",
+  )!;
+  run(
+    "UPDATE enrichments SET data = ? WHERE person_id = ?",
+    JSON.stringify({
+      title: true,
+      city: true,
+      company: "Figma",
+      positions: [{ company: "Figma", title: true, start: true }],
+      skills: true,
+    }),
+    sara.id,
+  );
+  await rebuild(() => {}, { embed: false });
+  const p = get<{ company: string; title: string | null }>(
+    "SELECT company, title FROM people WHERE id = ?",
+    sara.id,
+  )!;
+  assert.equal(p.company, "Figma");
+});

@@ -26,22 +26,29 @@ export type CompanyEnrichResult =
 type Provider = (c: CompanyRow) => Promise<CompanyEnrichResult>;
 
 export function mapPdlCompany(d: any): CompanyProfile {
+  const t = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
+  const n = (v: unknown) => (typeof v === "number" ? v : undefined);
+  d = Object.fromEntries(
+    Object.entries(d ?? {}).map(([k, v]) => [k, v === true ? undefined : v]),
+  );
   return {
-    name: d.display_name ?? d.name,
+    name: t(d.display_name) ?? t(d.name),
     domain: normalizeDomain(d.website) ?? undefined,
     linkedinUrl: d.linkedin_url
       ? `https://${String(d.linkedin_url).replace(/^https?:\/\//, "")}`
       : undefined,
-    industry: d.industry ?? undefined,
-    size: d.size ?? undefined,
-    employeeCount: d.employee_count ?? undefined,
-    city: d.location?.locality ?? undefined,
-    region: d.location?.region ?? undefined,
-    country: d.location?.country ?? undefined,
-    founded: d.founded ?? undefined,
-    fundingStage: d.latest_funding_stage ?? undefined,
-    description: d.summary ? String(d.summary).slice(0, 800) : undefined,
-    tags: Array.isArray(d.tags) ? d.tags.slice(0, 15) : undefined,
+    industry: t(d.industry),
+    size: t(d.size),
+    employeeCount: n(d.employee_count),
+    city: t(d.location?.locality),
+    region: t(d.location?.region),
+    country: t(d.location?.country),
+    founded: n(d.founded),
+    fundingStage: t(d.latest_funding_stage),
+    description: t(d.summary)?.slice(0, 800),
+    tags: Array.isArray(d.tags)
+      ? d.tags.filter((x: unknown) => typeof x === "string").slice(0, 15)
+      : undefined,
   };
 }
 

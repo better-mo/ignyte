@@ -63,50 +63,61 @@ export const pdl: EnrichmentProvider = {
   },
 };
 
+// PDL returns `true` for fields your plan hasn't unlocked; only real values count.
+export const str = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() ? v : undefined;
+export const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+
 export function mapPdl(d: any): EnrichedProfile {
   return clean({
-    fullName: d.full_name,
-    headline: d.headline ?? undefined,
-    title: d.job_title,
-    company: d.job_company_name,
-    companyDomain: d.job_company_website,
-    city: d.location_locality,
-    region: d.location_region,
-    country: d.location_country,
-    linkedinUrl: withHttps(d.linkedin_url),
-    xHandle: xHandle(d.twitter_url) ?? undefined,
-    githubUrl: withHttps(d.github_url),
-    summary: d.summary,
-    skills: (d.skills ?? []).slice(0, 25),
-    interests: (d.interests ?? []).slice(0, 15),
+    fullName: str(d.full_name),
+    headline: str(d.headline),
+    title: str(d.job_title),
+    company: str(d.job_company_name),
+    companyDomain: str(d.job_company_website),
+    city: str(d.location_locality),
+    region: str(d.location_region),
+    country: str(d.location_country),
+    linkedinUrl: withHttps(str(d.linkedin_url)),
+    xHandle: xHandle(str(d.twitter_url)) ?? undefined,
+    githubUrl: withHttps(str(d.github_url)),
+    summary: str(d.summary),
+    skills: arr(d.skills)
+      .filter((x) => typeof x === "string")
+      .slice(0, 25),
+    interests: arr(d.interests)
+      .filter((x) => typeof x === "string")
+      .slice(0, 15),
     emails: [
-      ...(Array.isArray(d.emails)
-        ? d.emails.map((e: any) => (typeof e === "string" ? e : e.address))
-        : []),
-      ...(typeof d.work_email === "string" ? [d.work_email] : []),
-      ...(Array.isArray(d.personal_emails) ? d.personal_emails : []),
+      ...arr(d.emails).map((e: any) =>
+        typeof e === "string" ? e : e?.address,
+      ),
+      d.work_email,
+      ...arr(d.personal_emails),
     ].filter((e: unknown): e is string => typeof e === "string"),
-    positions: (d.experience ?? [])
-      .filter((x: any) => x.company?.name)
+    positions: arr(d.experience)
+      .filter((x: any) => str(x?.company?.name))
       .map((x: any) =>
         clean({
           company: x.company.name,
-          domain: x.company.website ?? undefined,
-          title: x.title?.name ?? undefined,
-          start: x.start_date ?? undefined,
-          end: x.end_date ?? undefined,
-          current: !x.end_date && !!x.is_primary,
+          domain: str(x.company.website),
+          title: str(x.title?.name),
+          start: str(x.start_date),
+          end: str(x.end_date),
+          current: !str(x.end_date) && x.is_primary === true,
         }),
       ),
-    schools: (d.education ?? [])
-      .filter((x: any) => x.school?.name)
+    schools: arr(d.education)
+      .filter((x: any) => str(x?.school?.name))
       .map((x: any) =>
         clean({
           school: x.school.name,
           degree:
-            [...(x.degrees ?? []), ...(x.majors ?? [])].join(", ") || undefined,
-          start: x.start_date ?? undefined,
-          end: x.end_date ?? undefined,
+            [...arr(x.degrees), ...arr(x.majors)]
+              .filter((v) => typeof v === "string")
+              .join(", ") || undefined,
+          start: str(x.start_date),
+          end: str(x.end_date),
         }),
       ),
   });
@@ -150,26 +161,26 @@ export const apollo: EnrichmentProvider = {
       status: "matched",
       raw,
       profile: clean({
-        fullName: p.name,
-        headline: p.headline,
-        title: p.title,
-        company: p.organization?.name,
-        companyDomain: p.organization?.primary_domain,
-        city: p.city,
-        region: p.state,
-        country: p.country,
-        linkedinUrl: p.linkedin_url,
-        xHandle: xHandle(p.twitter_url) ?? undefined,
-        githubUrl: p.github_url,
-        photoUrl: p.photo_url,
-        positions: (p.employment_history ?? [])
-          .filter((x: any) => x.organization_name)
+        fullName: str(p.name),
+        headline: str(p.headline),
+        title: str(p.title),
+        company: str(p.organization?.name),
+        companyDomain: str(p.organization?.primary_domain),
+        city: str(p.city),
+        region: str(p.state),
+        country: str(p.country),
+        linkedinUrl: str(p.linkedin_url),
+        xHandle: xHandle(str(p.twitter_url)) ?? undefined,
+        githubUrl: str(p.github_url),
+        photoUrl: str(p.photo_url),
+        positions: arr(p.employment_history)
+          .filter((x: any) => str(x?.organization_name))
           .map((x: any) =>
             clean({
               company: x.organization_name,
-              title: x.title,
-              start: x.start_date?.slice(0, 7),
-              end: x.end_date?.slice(0, 7),
+              title: str(x.title),
+              start: str(x.start_date)?.slice(0, 7),
+              end: str(x.end_date)?.slice(0, 7),
               current: !!x.current,
             }),
           ),

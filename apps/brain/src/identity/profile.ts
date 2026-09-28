@@ -73,6 +73,37 @@ function splitLocation(loc?: string) {
   };
 }
 
+/** Drop non-string values (e.g. `true` placeholders from locked PDL fields) saved earlier. */
+function sanitizeEnriched(e: any): EnrichedProfile {
+  const s = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
+  const out: any = {};
+  for (const [k, v] of Object.entries(e ?? {})) {
+    if (k === "positions")
+      out.positions = (Array.isArray(v) ? v : [])
+        .filter((p: any) => s(p?.company))
+        .map((p: any) => ({
+          company: p.company,
+          domain: s(p.domain),
+          title: s(p.title),
+          start: s(p.start),
+          end: s(p.end),
+          current: p.current === true,
+        }));
+    else if (k === "schools")
+      out.schools = (Array.isArray(v) ? v : [])
+        .filter((x: any) => s(x?.school))
+        .map((x: any) => ({
+          school: x.school,
+          degree: s(x.degree),
+          start: s(x.start),
+          end: s(x.end),
+        }));
+    else if (Array.isArray(v)) out[k] = v.filter((x) => typeof x === "string");
+    else out[k] = s(v);
+  }
+  return out;
+}
+
 /** Recompute a person's display fields, jobs and schools from everything we know. */
 export function rebuildPerson(personId: string) {
   const obs = all<{ source: string; data: string }>(
@@ -87,7 +118,7 @@ export function rebuildPerson(personId: string) {
     personId,
   );
   const en: EnrichedProfile | undefined = enrichedRow
-    ? JSON.parse(enrichedRow.data)
+    ? sanitizeEnriched(JSON.parse(enrichedRow.data))
     : undefined;
   const ids = all<{ kind: string; value: string }>(
     "SELECT kind, value FROM identifiers WHERE person_id = ?",
