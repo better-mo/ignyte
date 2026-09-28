@@ -359,26 +359,61 @@ let peopleTimer;
     peopleTimer = setTimeout(loadPeople, 200);
   }),
 );
+const PAGE = 120;
+let peopleQuery = "";
+let peopleOffset = 0;
+let peopleTotal = 0;
+let peopleLoading = false;
+
+const personCard = (
+  p,
+) => `<button class="person-card" data-person="${esc(p.id)}">${avatar(p)}<div><b>${esc(p.name)}</b><div class="muted">${esc(p.headline ?? "")}</div>
+  <div class="tier">${esc(p.tier ?? "—")}${p.city ? ` · ${esc(p.city)}` : ""}${p.last ? ` · ${ago(p.last)}` : ""}</div>${strengthBar(p.strength)}</div></button>`;
+
+/** First page for the current filters; later pages load as you scroll. */
 async function loadPeople() {
-  const params = new URLSearchParams({
+  peopleQuery = new URLSearchParams({
     q: $("#q").value,
     city: $("#fCity").value,
     company: $("#fCompany").value,
     community: $("#fCommunity").value,
     weak: "1",
-    limit: "120",
-  });
-  const people = await api(`/api/people?${params}`);
-  $("#peopleList").innerHTML =
-    people
-      .map(
-        (
-          p,
-        ) => `<button class="person-card" data-person="${esc(p.id)}">${avatar(p)}<div><b>${esc(p.name)}</b><div class="muted">${esc(p.headline ?? "")}</div>
-        <div class="tier">${esc(p.tier ?? "—")}${p.city ? ` · ${esc(p.city)}` : ""}${p.last ? ` · ${ago(p.last)}` : ""}</div>${strengthBar(p.strength)}</div></button>`,
-      )
-      .join("") || `<p class="muted">No one matches.</p>`;
+  }).toString();
+  peopleOffset = 0;
+  $("#peopleList").innerHTML = "";
+  await loadMorePeople();
 }
+
+async function loadMorePeople() {
+  if (peopleLoading) return;
+  peopleLoading = true;
+  const query = peopleQuery;
+  try {
+    const page = await api(
+      `/api/people?${query}&offset=${peopleOffset}&limit=${PAGE}`,
+    );
+    if (query !== peopleQuery) return; // filters changed while loading
+    peopleTotal = page.total;
+    peopleOffset += page.items.length;
+    $("#peopleList").insertAdjacentHTML(
+      "beforeend",
+      page.items.map(personCard).join(""),
+    );
+    $("#peopleCount").textContent = peopleTotal
+      ? `${peopleOffset.toLocaleString()} of ${peopleTotal.toLocaleString()}`
+      : "No one matches.";
+  } finally {
+    peopleLoading = false;
+  }
+}
+
+new IntersectionObserver(
+  (entries) => {
+    if (entries[0].isIntersecting && peopleOffset < peopleTotal)
+      loadMorePeople();
+  },
+  { root: $("#view-people"), rootMargin: "600px" },
+).observe($("#peopleMore"));
 
 // ---------- graph ----------
 async function loadGraph() {

@@ -478,6 +478,10 @@ main {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 10px;
 }
+.people-more {
+  padding: 0 32px 40px;
+  font-size: 13px;
+}
 .person-card {
   border: 1px solid var(--line);
   background: var(--white);
@@ -694,6 +698,7 @@ main {
   }
   .view-head,
   .people-list,
+  .people-more,
   #sources {
     padding-left: 16px;
     padding-right: 16px;

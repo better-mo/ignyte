@@ -48,7 +48,7 @@ export function ftsQuery(text: string): string | null {
   return [...new Set(terms)].map((t) => `"${t}"*`).join(" OR ");
 }
 
-function lexical(query: string, k = 100): { id: string; score: number }[] {
+function lexical(query: string, k = 2000): { id: string; score: number }[] {
   const q = ftsQuery(query);
   if (!q) return [];
   try {

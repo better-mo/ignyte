@@ -105,6 +105,7 @@ export function startServer(port = config.port) {
         });
 
       if (p === "/api/people") {
+        // Rank everyone that matches, then page; fine at personal-network scale.
         const results = await searchPeople(
           url.searchParams.get("q") ?? "",
           {
@@ -113,12 +114,13 @@ export function startServer(port = config.port) {
             community: url.searchParams.get("community") || undefined,
             includeWeak: url.searchParams.get("weak") === "1",
           },
-          Number(url.searchParams.get("limit") ?? 60),
+          1_000_000,
         );
-        return json(
-          res,
-          200,
-          results.map((r) => ({
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        const limit = Number(url.searchParams.get("limit") ?? 60);
+        return json(res, 200, {
+          total: results.length,
+          items: results.slice(offset, offset + limit).map((r) => ({
             id: r.person.id,
             name: r.person.display_name,
             headline: r.person.headline,
@@ -129,7 +131,7 @@ export function startServer(port = config.port) {
             photo: r.person.photo_url,
             last: r.person.last_interaction_at,
           })),
-        );
+        });
       }
 
       const personMatch = p.match(
