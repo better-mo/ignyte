@@ -328,3 +328,28 @@ test("pdl locked fields (true placeholders) are ignored", () => {
     { company: "Acme", start: "2020-01", current: true },
   ]);
 });
+
+test("enrichment skips inboxes, teams and organisations", async () => {
+  const { looksLikePerson } = await import("../src/enrich/index.ts");
+  for (const n of ["Sara Chen", "Daniel", "Mary-Jane O'Neil"])
+    assert.equal(looksLikePerson(n), true, n);
+  for (const n of [
+    "info",
+    "ClientServices",
+    "notes@metaview.ai",
+    "AngelList Wires Team",
+    "TD Canada Trust",
+    "Customer Success",
+  ])
+    assert.equal(looksLikePerson(n), false, n);
+});
+
+test("rate-limit wait comes from Retry-After or the reset header", async () => {
+  const { waitFromHeaders } = await import("../src/enrich/http.ts");
+  assert.equal(waitFromHeaders(new Headers({ "retry-after": "7" })), 7000);
+  assert.equal(waitFromHeaders(new Headers({ "x-ratelimit-reset": "3" })), 3000);
+  const reset = Math.floor(Date.now() / 1000) + 30;
+  const w = waitFromHeaders(new Headers({ "x-ratelimit-reset": String(reset) }))!;
+  assert.ok(w > 25_000 && w <= 31_000);
+  assert.equal(waitFromHeaders(new Headers()), undefined);
+});

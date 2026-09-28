@@ -1,5 +1,6 @@
 import { config } from "../config.ts";
 import { linkedinSlug, xHandle } from "../identity/normalize.ts";
+import { pacedFetch } from "./http.ts";
 import type {
   EnrichedProfile,
   EnrichmentProvider,
@@ -44,7 +45,8 @@ export const pdl: EnrichmentProvider = {
     if (!slug && !q.emails.length && !q.phones.length && !q.company)
       return { status: "no_match" };
 
-    const res = await fetch(
+    const res = await pacedFetch(
+      "pdl",
       `https://api.peopledatalabs.com/v5/person/enrich?${params}`,
       {
         headers: { "X-Api-Key": config.enrichment.pdlKey },
@@ -141,7 +143,7 @@ export const apollo: EnrichmentProvider = {
       organization_name: q.company,
       reveal_personal_emails: false,
     });
-    const res = await fetch("https://api.apollo.io/api/v1/people/match", {
+    const res = await pacedFetch("apollo", "https://api.apollo.io/api/v1/people/match", {
       method: "POST",
       headers: {
         "content-type": "application/json",

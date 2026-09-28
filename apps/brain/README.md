@@ -108,6 +108,8 @@ npm run brain -- enrich --person p_abc123     # or the "Enrich profile" button i
 
 Default provider: **People Data Labs** (`PDL_API_KEY`). It looks people up by email, phone, LinkedIn URL or name + company, and it returns dated work and education history. That history is what lets the graph say "Sara worked with Daniel at Shopify 2018–2021". PDL bills only on a match and has a free monthly allowance, so enriching your top few hundred ties costs little. **Apollo** is the alternative (`ENRICHMENT_PROVIDER=apollo`, `APOLLO_API_KEY`), and it uses your plan's credits. Check both vendors' current pricing before a big run.
 
+Enrichment calls are paced (`ENRICHMENT_PER_MINUTE`, default 10) and a rate-limit reply waits and retries, so a long run just goes slowly instead of failing. If the vendor keeps refusing, the run stops; people it didn't reach are picked up on the next run and nobody is looked up twice. Records that are clearly an inbox, team or organisation ("info", "Support Team", "TD Canada Trust") are skipped.
+
 Enrichment can also _merge_ records: a LinkedIn-only person and a Gmail person with the same LinkedIn URL become one.
 
 ## Talk to it

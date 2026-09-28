@@ -1,6 +1,7 @@
 import { config } from "../config.ts";
 import { all, get, run } from "../db/index.ts";
 import { normalizeDomain, type CompanyRow } from "./index.ts";
+import { pacedFetch, RateLimitError } from "../enrich/http.ts";
 
 export type CompanyProfile = {
   name?: string;
@@ -60,7 +61,8 @@ const pdl: Provider = async (c) => {
     ...(c.domain ? { website: c.domain } : { name: c.name }),
     titlecase: "true",
   });
-  const res = await fetch(
+  const res = await pacedFetch(
+    "pdl",
     `https://api.peopledatalabs.com/v5/company/enrich?${params}`,
     {
       headers: { "X-Api-Key": config.enrichment.pdlKey },
@@ -80,7 +82,8 @@ const apollo: Provider = async (c) => {
   if (!config.enrichment.apolloKey)
     return { status: "error", error: "APOLLO_API_KEY not set" };
   if (!c.domain) return { status: "no_match" };
-  const res = await fetch(
+  const res = await pacedFetch(
+    "apollo",
     `https://api.apollo.io/api/v1/organizations/enrich?domain=${encodeURIComponent(c.domain)}`,
     {
       headers: { "x-api-key": config.enrichment.apolloKey },
@@ -190,7 +193,14 @@ export async function enrichCompanies(
       );
   const tally = { matched: 0, no_match: 0, error: 0 };
   for (const c of targets) {
-    const r = await provider(c);
+    let r: CompanyEnrichResult;
+    try {
+      r = await provider(c);
+    } catch (err) {
+      if (!(err instanceof RateLimitError)) throw err;
+      log(`  ${err.message}. Stopping; re-run later to continue.`);
+      break;
+    }
     tally[r.status]++;
     if (r.status === "error") {
       log(`  company ${c.name}: ${r.error}`);

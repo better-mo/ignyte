@@ -3,6 +3,24 @@ import { all, get, run } from "../db/index.ts";
 import { addIdentifiers } from "../identity/store.ts";
 import { rebuildPerson } from "../identity/profile.ts";
 import { providers } from "./providers.ts";
+import { RateLimitError } from "./http.ts";
+import type { EnrichmentResult } from "./types.ts";
+
+const ROLE_NAME =
+  /^(info|hello|hi|team|support|help|admin|sales|billing|accounts?|notes?|client ?services|customer ?(service|success|care)|noreply|no-reply|contact|office|hr|jobs|careers|press|marketing|finance|legal|security|ops|operations)$/i;
+const ORG_WORD =
+  /\b(team|inc\.?|llc|ltd|corp(oration)?|bank|trust|group|wires|services|support|notifications?|newsletter|digest|alerts?|hq|foundation|capital|ventures|partners|labs?|studio|agency)\b/i;
+
+/** Names that are clearly an inbox, team or organisation rather than a person. */
+export function looksLikePerson(name: string): boolean {
+  const n = name.trim();
+  if (!n || n.includes("@") || /\d{3,}/.test(n)) return false;
+  if (ROLE_NAME.test(n.replace(/[._-]+/g, " "))) return false;
+  if (ORG_WORD.test(n)) return false;
+  // One-word names are allowed only when they look like a real first name ("Sara"), not "ClientServices".
+  if (!/\s/.test(n) && /[a-z][A-Z]/.test(n)) return false;
+  return true;
+}
 
 export type EnrichOptions = {
   limit?: number;
@@ -45,8 +63,12 @@ export async function enrichPeople(
         limit,
       );
 
-  const tally = { matched: 0, no_match: 0, error: 0 };
+  const tally = { matched: 0, no_match: 0, error: 0, skipped: 0 };
   for (const c of candidates) {
+    if (!opts.personIds?.length && !looksLikePerson(c.display_name)) {
+      tally.skipped++;
+      continue;
+    }
     const ids = all<{ kind: string; value: string }>(
       "SELECT kind, value FROM identifiers WHERE person_id = ?",
       c.id,
@@ -63,7 +85,14 @@ export async function enrichPeople(
         : undefined,
       company: c.company ?? undefined,
     };
-    const result = await provider.enrich(query);
+    let result: EnrichmentResult;
+    try {
+      result = await provider.enrich(query);
+    } catch (err) {
+      if (!(err instanceof RateLimitError)) throw err;
+      log(`  ${err.message}. Stopping; re-run later to continue where this left off.`);
+      break;
+    }
     tally[result.status]++;
     if (result.status === "error") {
       log(`  enrich ${c.display_name}: ${result.error}`);
@@ -102,7 +131,7 @@ export async function enrichPeople(
     );
   }
   log(
-    `  enrichment via ${provider.name}: ${tally.matched} matched, ${tally.no_match} no match, ${tally.error} errors`,
+    `  enrichment via ${provider.name}: ${tally.matched} matched, ${tally.no_match} no match, ${tally.error} errors, ${tally.skipped} skipped (not a person)`,
   );
   return tally;
 }
