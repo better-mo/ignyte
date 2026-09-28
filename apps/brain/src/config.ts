@@ -37,6 +37,9 @@ export const config = {
     clientSecret: env("GOOGLE_CLIENT_SECRET"),
     // How far back the first Gmail / Calendar sync reaches.
     gmailLookbackDays: Number(env("GMAIL_LOOKBACK_DAYS", "1095")),
+    // Only mail you sent or that was addressed/cc'd to one of your addresses; skips
+    // team-alias and group traffic. Set GMAIL_ALL_MAIL=1 to sync everything.
+    gmailAllMail: env("GMAIL_ALL_MAIL") === "1",
     calendarLookbackDays: Number(env("CALENDAR_LOOKBACK_DAYS", "1095")),
     calendarLookaheadDays: Number(env("CALENDAR_LOOKAHEAD_DAYS", "60")),
   },

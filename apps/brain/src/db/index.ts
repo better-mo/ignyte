@@ -203,6 +203,8 @@ let instance: DatabaseSync | null = null;
 export function db(): DatabaseSync {
   if (!instance) {
     instance = new DatabaseSync(config.dbPath);
+    // Wait for another writer (web server, a second sync) instead of failing at once.
+    instance.exec("PRAGMA busy_timeout = 30000;");
     instance.exec(SCHEMA);
     migrate(instance);
   }

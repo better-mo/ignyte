@@ -172,12 +172,16 @@ export async function syncGmail(
   // All of your addresses across accounts, so mail between your own inboxes reads correctly.
   const mine = new Set([...(await registerSelf(account)), ...myEmails()]);
   const state = account.sync_state as { gmailAfter?: number };
+  const me = [...mine].join(" OR ");
   const q = [
+    config.google.gmailAllMail ? "" : `{from:(${me}) to:(${me}) cc:(${me})}`,
     state.gmailAfter
       ? `after:${state.gmailAfter}`
       : `newer_than:${config.google.gmailLookbackDays}d`,
     "-in:chats -in:spam -in:trash -category:promotions -category:social",
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const ids: string[] = [];
   let pageToken: string | undefined;
