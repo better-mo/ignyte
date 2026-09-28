@@ -22,7 +22,7 @@ Data: ${config.dataDir}
 
 Connect & import
   connect google <label> [--hint you@gmail.com]   Sign in to a Google account (repeat per account)
-  sync [--account <email|label>] [--only gmail,contacts,calendar]
+  sync [--account <email|label>] [--only gmail,contacts,calendar,communities]
   import linkedin <export.zip|folder>
   import x <archive.zip|folder>
   import vcf <contacts.vcf>                       Phone contacts

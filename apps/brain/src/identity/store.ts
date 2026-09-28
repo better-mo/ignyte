@@ -258,12 +258,13 @@ export function saveInteraction(it: Interaction) {
       p.handleKind === "email" ? normalizeEmail(p.handle) : p.handle;
     if (!handle) continue;
     run(
-      "INSERT OR IGNORE INTO participants (interaction_id, handle_kind, handle, name, role) VALUES (?, ?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO participants (interaction_id, handle_kind, handle, name, role, person_id) VALUES (?, ?, ?, ?, ?, ?)",
       it.id,
       p.handleKind,
       handle,
       p.name ?? null,
       p.role,
+      p.handleKind === "person" ? handle : null,
     );
   }
   run("DELETE FROM activity_fts WHERE interaction_id = ?", it.id);

@@ -234,3 +234,66 @@ test("company keys fold renames and domains normalize", () => {
   assert.equal(normalizeDomain("https://www.Shopify.com/about"), "shopify.com");
   assert.equal(normalizeDomain("not a domain"), null);
 });
+
+test("mobilize digest: comments, quoted original, group and community", async () => {
+  const { parseMobilize } =
+    await import("../src/sources/google/communityDigests.ts");
+  const text = fs.readFileSync(
+    path.join(import.meta.dirname, "../fixtures/mobilize/reply.txt"),
+    "utf8",
+  );
+  const d = parseMobilize({
+    text,
+    subject: "[HR] Re: US : Background Verifications",
+    cc: ["exhr@groups.mobilize.io"],
+  })!;
+  assert.equal(d.community, "Example Ventures CXO Community");
+  assert.equal(d.group, "HR");
+  assert.equal(d.title, "US : Background Verifications");
+  assert.deepEqual(
+    d.posts.map((p) => [p.author, p.company, p.original]),
+    [
+      ["Jordan Avery", "Northwind Labs", false],
+      ["Casey Morgan", "Valence", false],
+      ["Riley Quinn St. Clair", "Aivar", true],
+    ],
+  );
+  const single = parseMobilize({
+    text: "Is anyone using Trigger.dev in production?\n\nappreciates: 0 (x)\n\nSam Lee\nAcme Robotics\n\n[Join this discussion](x)\n\nYou’re receiving this message because you are a member of Example Ventures CXO Community.\n",
+    subject: "[CTO] Trigger.dev — anyone using it?",
+  })!;
+  assert.deepEqual(
+    single.posts.map((p) => [p.author, p.company, p.text]),
+    [
+      [
+        "Sam Lee",
+        "Acme Robotics",
+        "Is anyone using Trigger.dev in production?",
+      ],
+    ],
+  );
+  assert.equal(single.group, "CTO");
+});
+
+test("gmail full payload: text/plain preferred, html fallback", async () => {
+  const { messageText } =
+    await import("../src/sources/google/communityDigests.ts");
+  const b64 = (s: string) => Buffer.from(s).toString("base64url");
+  assert.equal(
+    messageText({
+      mimeType: "multipart/alternative",
+      parts: [
+        { mimeType: "text/html", body: { data: b64("<p>html</p>") } },
+        { mimeType: "text/plain", body: { data: b64("plain ’ text") } },
+      ],
+    }),
+    "plain ’ text",
+  );
+  assert.equal(
+    messageText({
+      mimeType: "text/html",
+      body: { data: b64("<p>Hi&nbsp;there</p><br>Bye") },
+    }).trim(),
+    "Hi there\n\nBye",
+  );
+});

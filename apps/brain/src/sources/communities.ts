@@ -4,9 +4,14 @@ import { hash } from "../identity/normalize.ts";
 import { saveInteraction, upsertObservation } from "../identity/store.ts";
 import { readCsv, toIso } from "./files.ts";
 
-const communityId = (name: string) => `c:${hash(name.toLowerCase())}`;
+export const communityId = (name: string) =>
+  `c:${hash(name.trim().toLowerCase())}`;
 
-function ensureCommunity(name: string, provider = "manual", url?: string) {
+export function ensureCommunity(
+  name: string,
+  provider = "manual",
+  url?: string,
+) {
   const id = communityId(name);
   run(
     "INSERT INTO communities (id, name, provider, url) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET url = COALESCE(excluded.url, url)",
@@ -30,7 +35,9 @@ export function importCommunityMembers(csvPath: string, log = console.log) {
     for (const r of rows) {
       if (!r.community) continue;
       const cid = ensureCommunity(r.community, r.provider || "manual");
-      const isMe = (r.role ?? "").toLowerCase() === "me";
+      // role "me" marks you; "me:host" / "me:speaker" also records your role there.
+      const [roleKind, myRole] = (r.role ?? "").toLowerCase().split(":");
+      const isMe = roleKind === "me";
       const personId = upsertObservation(
         "community",
         cid,
@@ -48,7 +55,7 @@ export function importCommunityMembers(csvPath: string, log = console.log) {
         "INSERT OR REPLACE INTO memberships (community_id, person_id, role, source) VALUES (?, ?, ?, 'import')",
         cid,
         personId,
-        isMe ? "member" : r.role || "member",
+        isMe ? myRole || "member" : r.role || "member",
       );
       count++;
     }

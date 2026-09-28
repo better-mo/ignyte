@@ -75,7 +75,8 @@ export type ParticipantRole =
   | "member";
 
 export type Participant = {
-  handleKind: "email" | "x_id" | "linkedin" | "name";
+  /** "person" = already-resolved person id (for sources with no usable identifier). */
+  handleKind: "email" | "x_id" | "linkedin" | "name" | "person";
   handle: string;
   name?: string;
   role: ParticipantRole;

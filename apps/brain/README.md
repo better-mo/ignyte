@@ -91,6 +91,12 @@ npm run brain -- import communities members.csv            # community,name,emai
 npm run brain -- import community-activity posts.csv       # community,type(post|event),author_email,author_name,date,title,body,url,location
 ```
 
+**Community emails (who else is in your communities).** `sync` reads the full body of community notification emails only. Other mail stays headers-only. It starts with Mobilize, the platform behind the Bessemer portfolio community. Each author becomes a community member with their company, each post becomes searchable activity, and you're recorded as a member. Mobilize relay addresses are never treated as real emails. Authors are matched to people you already know by name and company. Parsing is rule-based, so there's no Claude cost. To backfill 3 years:
+
+```sh
+npm run brain -- sync --only communities
+```
+
 Community membership is treated as **context, not proof of a relationship**, in scoring, paths and Claude's answers.
 
 ## Enrichment

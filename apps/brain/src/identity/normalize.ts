@@ -111,7 +111,12 @@ const NOREPLY =
 const BULK_DOMAINS =
   /@((.*\.)?(mailchimp|mcsv|sendgrid|mandrillapp|amazonses|intercom-mail|hubspotemail|mktomail|sparkpostmail|mailgun|customeriomail|substack)\.(com|net|io)|(mail|email|e|em|news|newsletter|notifications?|info|marketing|updates|alerts|mailer|bounce|reply)\.[^@]+)$/i;
 
+// Per-member relay addresses of community platforms: not a person's real email.
+const RELAY =
+  /@(members|groups)\.mobilize\.io$|@(reply|replies|relay)\.[^@]+$/i;
+
 export function looksAutomated(email: string): boolean {
+  if (RELAY.test(email)) return true;
   return NOREPLY.test(email) || BULK_DOMAINS.test(email);
 }
 

@@ -162,3 +162,61 @@ test("companies: warmest-first list filtered by industry", async () => {
       all.findIndex((c: any) => c.name === "Loom"),
   );
 });
+
+test("community digest authors link to people already in your network", async () => {
+  const { saveDigest } =
+    await import("../src/sources/google/communityDigests.ts");
+  const { rebuild } = await import("../src/pipeline.ts");
+  saveDigest(
+    {
+      community: "Example Ventures CXO Community",
+      group: "CTO",
+      title: "Eval tooling for LLM features",
+      posts: [
+        {
+          author: "Nina Patel",
+          company: "Linear",
+          text: "We built evals on top of our CI and it works well.",
+          original: false,
+        },
+        {
+          author: "Stranger Person",
+          company: "Unknown Co",
+          text: "What do people use for LLM evals?",
+          original: true,
+        },
+      ],
+    },
+    new Date().toISOString(),
+  );
+  await rebuild(() => {}, { embed: false });
+  const nina = all<{ id: string }>(
+    "SELECT id FROM people WHERE display_name = 'Nina Patel'",
+  );
+  assert.equal(
+    nina.length,
+    1,
+    "community Nina merged into the Nina you already know",
+  );
+  const members = await call("communities", {
+    name: "Example Ventures CXO Community · CTO",
+  });
+  assert.ok(
+    members.members.some((m: any) => m.name === "Nina Patel" && m.strength > 0),
+  );
+  const posts = await call("search_activity", { query: "LLM evals" });
+  assert.ok(
+    posts.some(
+      (p: any) =>
+        p.people?.includes("Nina Patel") ||
+        p.people?.includes("Stranger Person"),
+    ),
+  );
+  const me = await call("communities", {});
+  assert.ok(
+    me.some(
+      (c: any) =>
+        c.name === "Example Ventures CXO Community" && c.you_are_member === 1,
+    ),
+  );
+});
