@@ -7,6 +7,11 @@ import path from "node:path";
 import { APP_ROOT, config } from "./config.ts";
 import { get, run, tx } from "./db/index.ts";
 import { enrichPeople } from "./enrich/index.ts";
+import {
+  companyProviders,
+  enrichCompanies,
+  mapPdlCompany,
+} from "./companies/enrich.ts";
 import { mapPdl, providers } from "./enrich/providers.ts";
 import { linkedinSlug } from "./identity/normalize.ts";
 import { saveInteraction, upsertObservation } from "./identity/store.ts";
@@ -639,8 +644,110 @@ export async function loadDemo(log = console.log) {
     },
   };
   await enrichPeople({ provider: "fixture", minStrength: 0, limit: 100 }, log);
+  await rebuild(log, { embed: false });
+
+  // Offline stand-in for PDL company enrichment.
+  companyProviders.fixture = async (c) => {
+    const d = pdlCompanyFixtures[c.key];
+    return d
+      ? { status: "matched", profile: mapPdlCompany(d) }
+      : { status: "no_match" };
+  };
+  await enrichCompanies({ provider: "fixture", limit: 100 }, log);
   await rebuild(log);
 }
+
+const co = (
+  name: string,
+  website: string,
+  industry: string,
+  size: string,
+  locality: string,
+  country: string,
+  tags: string[],
+  summary: string,
+) => ({
+  display_name: name,
+  website,
+  industry,
+  size,
+  location: { locality, country },
+  tags,
+  summary,
+  linkedin_url: `linkedin.com/company/${name.toLowerCase()}`,
+});
+const pdlCompanyFixtures: Record<string, any> = {
+  shopify: co(
+    "Shopify",
+    "shopify.com",
+    "internet",
+    "10001+",
+    "Ottawa",
+    "Canada",
+    ["e-commerce", "commerce platform"],
+    "Commerce platform for merchants.",
+  ),
+  figma: co(
+    "Figma",
+    "figma.com",
+    "computer software",
+    "1001-5000",
+    "San Francisco",
+    "United States",
+    ["design tools", "collaboration"],
+    "Collaborative interface design tool.",
+  ),
+  linear: co(
+    "Linear",
+    "linear.app",
+    "computer software",
+    "51-200",
+    "San Francisco",
+    "United States",
+    ["project management", "developer tools"],
+    "Issue tracking for software teams.",
+  ),
+  stripe: co(
+    "Stripe",
+    "stripe.com",
+    "financial services",
+    "5001-10000",
+    "San Francisco",
+    "United States",
+    ["fintech", "payments"],
+    "Payments infrastructure for the internet.",
+  ),
+  notion: co(
+    "Notion",
+    "notion.so",
+    "computer software",
+    "501-1000",
+    "San Francisco",
+    "United States",
+    ["productivity", "collaboration"],
+    "Connected workspace for docs and projects.",
+  ),
+  loom: co(
+    "Loom",
+    "loom.com",
+    "computer software",
+    "201-500",
+    "San Francisco",
+    "United States",
+    ["video messaging"],
+    "Async video messaging for work.",
+  ),
+  vanta: co(
+    "Vanta",
+    "vanta.com",
+    "computer and network security",
+    "501-1000",
+    "San Francisco",
+    "United States",
+    ["compliance automation", "soc 2", "security"],
+    "Automates SOC 2 and security compliance.",
+  ),
+};
 
 if (process.argv[1]?.endsWith("demo.ts")) {
   loadDemo().catch((err) => {

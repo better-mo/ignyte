@@ -1,5 +1,6 @@
 import { all, get } from "../db/index.ts";
 import { companyKey } from "../identity/normalize.ts";
+import { companyDomains, findCompany } from "../companies/index.ts";
 import type { PersonRow } from "../model.ts";
 import type { StrengthDetail } from "./strength.ts";
 
@@ -78,7 +79,7 @@ export function workedTogether(a: string, b: string) {
     b_end: string | null;
   }>(
     `SELECT e1.company, e1.start_date AS a_start, e1.end_date AS a_end, e2.start_date AS b_start, e2.end_date AS b_end
-     FROM employment e1 JOIN employment e2 ON e2.company_key = e1.company_key AND e2.person_id = ?
+     FROM employment e1 JOIN employment e2 ON COALESCE(e2.company_id, e2.company_key) = COALESCE(e1.company_id, e1.company_key) AND e2.person_id = ?
      WHERE e1.person_id = ?`,
     b,
     a,
@@ -205,36 +206,46 @@ export function neighbors(
   return [...acc.values()].sort((a, b) => b.weight - a.weight);
 }
 
-/** People who work (or worked) at a company, by name or domain. */
+/** People who work (or worked) at a company given by name, alias or domain. */
 export function peopleAtCompany(
   company: string,
   includePast = true,
 ): { person: PersonRow; role: string; current: boolean }[] {
-  const key = companyKey(company);
-  const domain = company.includes(".") ? company.toLowerCase() : null;
-  const rows = all<
-    PersonRow & {
-      e_title: string | null;
-      e_current: number;
-      e_start: string | null;
-      e_end: string | null;
-    }
-  >(
-    `SELECT p.*, e.title AS e_title, e.is_current AS e_current, e.start_date AS e_start, e.end_date AS e_end
+  type Row = PersonRow & {
+    e_title: string | null;
+    e_current: number;
+    e_start: string | null;
+    e_end: string | null;
+  };
+  const select = `SELECT p.*, e.title AS e_title, e.is_current AS e_current, e.start_date AS e_start, e.end_date AS e_end
      FROM employment e JOIN people p ON p.id = e.person_id
-     WHERE p.hidden = 0 AND p.is_me = 0 AND (e.company_key = ? OR e.company_key LIKE ? OR (? IS NOT NULL AND e.company_domain LIKE ?))
-     ORDER BY e.is_current DESC, p.strength DESC`,
-    key,
-    `${key} %`,
-    domain,
-    `%${domain ?? ""}%`,
-  );
-  // Also people whose work email is on the company's domain.
-  const byEmail = all<PersonRow>(
-    `SELECT DISTINCT p.* FROM identifiers i JOIN people p ON p.id = i.person_id
-     WHERE i.kind = 'email' AND p.hidden = 0 AND p.is_me = 0 AND (i.value LIKE ? OR i.value LIKE ?)`,
-    `%@${domain ?? key.replace(/\s/g, "")}.%`,
-    `%@${domain ?? key.replace(/\s/g, "") + ".com"}`,
+     WHERE p.hidden = 0 AND p.is_me = 0`;
+  const co = findCompany(company);
+  let rows: Row[];
+  let domains: string[];
+  if (co) {
+    rows = all<Row>(
+      `${select} AND e.company_id = ? ORDER BY e.is_current DESC, p.strength DESC`,
+      co.id,
+    );
+    domains = companyDomains(co.id);
+  } else {
+    const key = companyKey(company);
+    rows = all<Row>(
+      `${select} AND (e.company_key = ? OR e.company_key LIKE ?) ORDER BY e.is_current DESC, p.strength DESC`,
+      key,
+      `${key} %`,
+    );
+    domains = company.includes(".") ? [company.toLowerCase()] : [];
+  }
+  // Also people whose work email is on one of the company's domains.
+  const byEmail = domains.flatMap((d) =>
+    all<PersonRow>(
+      `SELECT DISTINCT p.* FROM identifiers i JOIN people p ON p.id = i.person_id
+       WHERE i.kind = 'email' AND p.hidden = 0 AND p.is_me = 0 AND (i.value LIKE ? OR i.value LIKE ?)`,
+      `%@${d}`,
+      `%.${d}`,
+    ),
   );
   const out = new Map<
     string,

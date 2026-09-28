@@ -127,3 +127,38 @@ test("done it before: SOC 2 post by Omar, reachable through Leo", async () => {
   );
   assert.ok(leo.knows.some((k: any) => k.name === "Omar Haddad"));
 });
+
+test("companies: one Shopify whether asked by name, alias or domain", async () => {
+  const { findCompany, aliasCompany } =
+    await import("../src/companies/index.ts");
+  const a = findCompany("Shopify Inc.");
+  assert.ok(a);
+  assert.equal(findCompany("shopify.com")?.id, a.id);
+  aliasCompany("Shopify Commerce", "Shopify");
+  assert.equal(findCompany("Shopify Commerce")?.id, a.id);
+  const c = await call("get_company", { company: "shopify.com" });
+  assert.equal(c.name, "Shopify");
+  assert.ok(c.current_people.some((p: any) => p.name === "Daniel Kim"));
+  assert.ok(c.alumni.some((p: any) => p.name === "Sara Chen"));
+  assert.ok(
+    c.warm_paths.some((w: any) =>
+      w.people.map((x: any) => x.name).includes("Sara Chen"),
+    ),
+  );
+});
+
+test("companies: warmest-first list filtered by industry", async () => {
+  const fintech = await call("companies_where_i_know_people", {
+    industry: "fintech",
+  });
+  assert.deepEqual(
+    fintech.map((c: any) => c.name),
+    ["Stripe"],
+  );
+  assert.equal(fintech[0].best_contact.name, "Ben Ortiz");
+  const all = await call("companies_where_i_know_people", {});
+  assert.ok(
+    all.findIndex((c: any) => c.name === "Figma") <
+      all.findIndex((c: any) => c.name === "Loom"),
+  );
+});

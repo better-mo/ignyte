@@ -32,6 +32,7 @@ Connect & import
 Build
   rebuild [--no-embed]                            Resolve identities, score, graph, index (runs after imports)
   enrich [--limit 25] [--min-strength 10] [--provider pdl|apollo] [--person <id>] [--force]
+  enrich-companies [--limit 25] [--company <name>] [--force]  Industry, size, HQ for companies you know people at
 
 Use
   serve [--port 4321]                             Local web app: chat, people, graph
@@ -41,10 +42,13 @@ Use
   search "<query>" [--city X] [--company X] [--community X]
   person <id|name>
   paths <company>
+  company <name|domain>
+  companies [--industry X] [--city X]            Companies where you know people, warmest first
   stats
 
 Fix
   merge <keep-id> <merge-id>                      Merge two people
+  company-alias <alias> <company>                 e.g. company-alias "Square" "Block" (merges if both exist)
 `;
 
 function flags(args: string[]) {
@@ -137,6 +141,46 @@ async function main() {
       });
       await rebuild(console.log);
       break;
+    case "enrich-companies": {
+      const { enrichCompanies } = await import("./companies/enrich.ts");
+      const { findCompany } = await import("./companies/index.ts");
+      const target =
+        typeof f.company === "string" ? findCompany(f.company) : undefined;
+      if (typeof f.company === "string" && !target)
+        throw new Error(`No company matching "${f.company}"`);
+      await enrichCompanies({
+        limit: f.limit ? Number(f.limit) : undefined,
+        companyIds: target ? [target.id] : undefined,
+        provider: typeof f.provider === "string" ? f.provider : undefined,
+        force: !!f.force,
+      });
+      await rebuild(console.log, { embed: !f["no-embed"] });
+      break;
+    }
+    case "company":
+      print(
+        await toolByName.get("get_company")!.run({ company: rest.join(" ") }),
+      );
+      break;
+    case "companies":
+      print(
+        await toolByName.get("companies_where_i_know_people")!.run({
+          query: rest.join(" ") || undefined,
+          industry: f.industry,
+          city: f.city,
+        }),
+      );
+      break;
+    case "company-alias": {
+      const { aliasCompany } = await import("./companies/index.ts");
+      const [alias, target] = rest;
+      if (!alias || !target)
+        throw new Error('Usage: company-alias "<alias>" "<company>"');
+      const c = aliasCompany(alias, target);
+      console.log(`"${alias}" now resolves to ${c.name}`);
+      await rebuild(console.log, { embed: false });
+      break;
+    }
     case "serve": {
       const { startServer } = await import("./server/index.ts");
       startServer(f.port ? Number(f.port) : undefined);

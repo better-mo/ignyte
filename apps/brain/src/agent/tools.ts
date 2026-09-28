@@ -11,6 +11,8 @@ import {
   peopleAtCompany,
   sharedCommunities,
 } from "../graph/query.ts";
+import { findCompany } from "../companies/index.ts";
+import { companyProfile, listCompanies } from "../companies/profile.ts";
 import { indexDocuments } from "../index/documents.ts";
 import { searchActivity, searchPeople } from "../index/search.ts";
 import type { PersonRow } from "../model.ts";
@@ -94,7 +96,9 @@ export function personProfile(p: PersonRow) {
       p.id,
     ).map((s) => s.source),
     career: all(
-      "SELECT company, title, start_date, end_date, is_current, source FROM employment WHERE person_id = ? ORDER BY is_current DESC, start_date DESC",
+      `SELECT COALESCE(c.name, e.company) AS company, e.company_id, c.industry, e.title, e.start_date, e.end_date, e.is_current, e.source
+       FROM employment e LEFT JOIN companies c ON c.id = e.company_id
+       WHERE e.person_id = ? ORDER BY e.is_current DESC, e.start_date DESC`,
       p.id,
     ),
     education: all(
@@ -200,9 +204,66 @@ export const tools: ToolDef[] = [
   }),
 
   tool({
+    name: "get_company",
+    description:
+      "One company from your network's point of view: what it is (industry, size, location), who you know there now and who used to work there (with how you know them), your best warm paths in, and recent mentions in your email and communities.",
+    schema: z.object({
+      company: z
+        .string()
+        .describe(
+          "Company name, alias or domain, e.g. 'Shopify', 'Facebook' or 'shopify.com'",
+        ),
+    }),
+    run(i) {
+      const c = findCompany(i.company);
+      if (!c)
+        return { error: `No company matching "${i.company}" in your network` };
+      return companyProfile(c);
+    },
+  }),
+
+  tool({
+    name: "companies_where_i_know_people",
+    description:
+      "Companies where you know someone, warmest access first, with your best contact at each. Filter by industry or keyword (e.g. 'fintech', 'customer support software'), location, or minimum relationship strength. Industry and location need company enrichment; without it only names are searchable.",
+    schema: z.object({
+      query: z
+        .string()
+        .optional()
+        .describe("Keyword over company name, industry, description and tags"),
+      industry: z.string().optional(),
+      city: z
+        .string()
+        .optional()
+        .describe("Company HQ city, region or country"),
+      min_strength: z
+        .number()
+        .min(0)
+        .max(100)
+        .optional()
+        .describe("Your best contact there must be at least this strong"),
+      current_only: z
+        .boolean()
+        .optional()
+        .describe("Only count people who work there now (default true)"),
+      limit: z.number().int().min(1).max(50).optional(),
+    }),
+    run(i) {
+      return listCompanies({
+        query: i.query,
+        industry: i.industry,
+        city: i.city,
+        minStrength: i.min_strength,
+        currentOnly: i.current_only ?? true,
+        limit: i.limit,
+      });
+    },
+  }),
+
+  tool({
     name: "who_do_i_know_at",
     description:
-      "Everyone in your network who works at a company now (and optionally in the past), with role and relationship strength.",
+      "Everyone in your network who works at a company now (and optionally in the past), with role and relationship strength. Understands aliases and domains (Facebook = Meta, shopify.com = Shopify).",
     schema: z.object({
       company: z
         .string()
@@ -213,15 +274,21 @@ export const tools: ToolDef[] = [
         .describe("Include former employees (default true)"),
     }),
     run(i) {
-      return peopleAtCompany(i.company, i.include_past ?? true)
-        .slice(0, 40)
-        .map((r) =>
-          compact(r.person, {
-            role_at_company: r.role,
-            current: r.current,
-            how_you_know_them: myEvidence(r.person.id).slice(0, 3),
-          }),
-        );
+      const c = findCompany(i.company);
+      return {
+        company: c
+          ? { id: c.id, name: c.name, domain: c.domain, industry: c.industry }
+          : null,
+        people: peopleAtCompany(i.company, i.include_past ?? true)
+          .slice(0, 40)
+          .map((r) =>
+            compact(r.person, {
+              role_at_company: r.role,
+              current: r.current,
+              how_you_know_them: myEvidence(r.person.id).slice(0, 3),
+            }),
+          ),
+      };
     },
   }),
 
@@ -444,8 +511,12 @@ export const tools: ToolDef[] = [
         interactions: all(
           "SELECT kind, COUNT(*) AS n FROM interactions GROUP BY kind",
         ),
+        companies: get("SELECT COUNT(*) AS n FROM companies")?.n,
         top_companies: all(
-          "SELECT company, COUNT(*) AS n FROM people WHERE company IS NOT NULL AND is_me = 0 AND strength > 0 GROUP BY company ORDER BY n DESC LIMIT 15",
+          `SELECT c.name, COUNT(DISTINCT e.person_id) AS people FROM companies c
+           JOIN employment e ON e.company_id = c.id AND e.is_current = 1
+           JOIN people p ON p.id = e.person_id AND p.is_me = 0
+           GROUP BY c.id ORDER BY people DESC LIMIT 15`,
         ),
         top_cities: all(
           "SELECT city, COUNT(*) AS n FROM people WHERE city IS NOT NULL AND is_me = 0 AND strength > 0 GROUP BY city ORDER BY n DESC LIMIT 15",
@@ -525,6 +596,12 @@ export const tools: ToolDef[] = [
         .string()
         .optional()
         .describe("Optional intro request or message draft"),
+      company: z
+        .string()
+        .optional()
+        .describe(
+          "Company this answer is about (name or id), shown as a header",
+        ),
     }),
     run(i) {
       const people = i.people
@@ -536,9 +613,24 @@ export const tools: ToolDef[] = [
         })
         .filter(Boolean);
       const self = me();
+      const c = i.company ? findCompany(i.company) : undefined;
       return {
         shown: true,
-        card: { ...i, me: self ? brief(self) : null, people },
+        card: {
+          ...i,
+          me: self ? brief(self) : null,
+          people,
+          company: c
+            ? {
+                id: c.id,
+                name: c.name,
+                domain: c.domain,
+                industry: c.industry,
+                location:
+                  [c.city, c.country].filter(Boolean).join(", ") || null,
+              }
+            : null,
+        },
       };
     },
   }),

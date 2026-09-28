@@ -1,4 +1,5 @@
 import { setMeta } from "./db/index.ts";
+import { resolveCompanies } from "./companies/index.ts";
 import { computeEdges } from "./graph/edges.ts";
 import { computeStrength } from "./graph/strength.ts";
 import { rebuildAllPeople } from "./identity/profile.ts";
@@ -26,9 +27,11 @@ export async function rebuild(
   const merged = resolveByName();
   if (merged) rebuildAllPeople();
   linkParticipants();
+  const companies = resolveCompanies();
   log(
     `  identity: ${merged} same-name merges, ${relinked} orphan records re-linked`,
   );
+  log(`  companies: ${companies}`);
   log(`  strength: scored ${computeStrength()} people`);
   log(`  graph: ${computeEdges()} person↔person edges`);
   log(`  index: ${indexDocuments()} profile documents`);

@@ -1,5 +1,6 @@
 import { all } from "../db/index.ts";
 import { companyKey } from "../identity/normalize.ts";
+import { findCompany } from "../companies/index.ts";
 import type { PersonRow } from "../model.ts";
 import { semanticSearch } from "./embeddings.ts";
 
@@ -76,11 +77,12 @@ export async function searchPeople(
     params.push(`%${filters.city}%`, `%${filters.city}%`, `%${filters.city}%`);
   }
   if (filters.company) {
-    where.push(
-      "EXISTS (SELECT 1 FROM employment e WHERE e.person_id = p.id AND (e.company_key = ? OR e.company_key LIKE ?))",
-    );
+    const co = findCompany(filters.company);
     const key = companyKey(filters.company);
-    params.push(key, `%${key}%`);
+    where.push(
+      "EXISTS (SELECT 1 FROM employment e WHERE e.person_id = p.id AND (e.company_id = ? OR e.company_key = ? OR e.company_key LIKE ?))",
+    );
+    params.push(co?.id ?? "", key, `%${key}%`);
   }
   if (filters.community) {
     where.push(

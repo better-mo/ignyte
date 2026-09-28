@@ -2,6 +2,7 @@ import { all, get, run, tx } from "../db/index.ts";
 import type { ObservedPerson, Position, School } from "../model.ts";
 import type { EnrichedProfile } from "../enrich/types.ts";
 import { companyKey, linkedinUrl, schoolKey, splitName } from "./normalize.ts";
+import { resolveCompany } from "../companies/index.ts";
 
 // Which source to believe first for each kind of field.
 const NAME_PRIORITY = [
@@ -174,12 +175,13 @@ export function rebuildPerson(personId: string) {
       seen.add(dedupe);
       seen.add(key);
       run(
-        `INSERT INTO employment (person_id, company, company_key, company_domain, title, start_date, end_date, is_current, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO employment (person_id, company, company_key, company_domain, company_id, title, start_date, end_date, is_current, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         personId,
         j.company,
         key,
         j.domain ?? null,
+        resolveCompany(j.company, j.domain, j.source),
         j.title ?? null,
         j.start ?? null,
         j.end ?? null,

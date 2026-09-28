@@ -102,6 +102,24 @@ CREATE TABLE IF NOT EXISTS employment (
 CREATE INDEX IF NOT EXISTS employment_person ON employment(person_id);
 CREATE INDEX IF NOT EXISTS employment_company ON employment(company_key);
 
+-- Companies are resolved from jobs: by web domain first, then alias/normalized name.
+CREATE TABLE IF NOT EXISTS companies (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  key TEXT NOT NULL,
+  domain TEXT,
+  linkedin_url TEXT, industry TEXT, size TEXT, employee_count INTEGER,
+  city TEXT, region TEXT, country TEXT, founded INTEGER,
+  funding_stage TEXT, description TEXT, tags TEXT,
+  enrich_status TEXT, enriched_at TEXT
+);
+-- kind = 'key' (normalized name) or 'domain'.
+CREATE TABLE IF NOT EXISTS company_aliases (
+  kind TEXT NOT NULL, value TEXT NOT NULL, company_id TEXT NOT NULL, source TEXT NOT NULL,
+  PRIMARY KEY (kind, value)
+);
+CREATE INDEX IF NOT EXISTS company_aliases_company ON company_aliases(company_id);
+
 CREATE TABLE IF NOT EXISTS education (
   id INTEGER PRIMARY KEY,
   person_id TEXT NOT NULL,
@@ -166,12 +184,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS activity_fts USING fts5(
 );
 `;
 
+/** Additive migrations for databases created by earlier versions. */
+function migrate(d: DatabaseSync) {
+  const cols = (table: string) =>
+    (d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+      (c) => c.name,
+    );
+  if (!cols("employment").includes("company_id")) {
+    d.exec("ALTER TABLE employment ADD COLUMN company_id TEXT");
+  }
+  d.exec(
+    "CREATE INDEX IF NOT EXISTS employment_company_id ON employment(company_id)",
+  );
+}
+
 let instance: DatabaseSync | null = null;
 
 export function db(): DatabaseSync {
   if (!instance) {
     instance = new DatabaseSync(config.dbPath);
     instance.exec(SCHEMA);
+    migrate(instance);
   }
   return instance;
 }

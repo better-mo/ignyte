@@ -93,13 +93,11 @@ http
         toolUse(n, "present", {
           kind: "path",
           title: "Sara can introduce you to Daniel at Shopify",
-          people: best.people
-            .slice(1)
-            .map((p) => ({
-              id: p.id,
-              reason: `${p.name}: ${p.headline}`,
-              badges: ["Product Manager Community"],
-            })),
+          people: best.people.slice(1).map((p) => ({
+            id: p.id,
+            reason: `${p.name}: ${p.headline}`,
+            badges: ["Product Manager Community"],
+          })),
           hops: best.hops.map((h) => ({
             evidence: h.evidence,
             confirmed: h.confirmed,

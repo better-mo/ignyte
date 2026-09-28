@@ -15,8 +15,12 @@ export function buildDocument(p: PersonRow) {
     start_date: string | null;
     end_date: string | null;
     is_current: number;
+    industry: string | null;
+    tags: string | null;
   }>(
-    "SELECT company, title, start_date, end_date, is_current FROM employment WHERE person_id = ? ORDER BY is_current DESC, start_date DESC",
+    `SELECT COALESCE(c.name, e.company) AS company, e.title, e.start_date, e.end_date, e.is_current, c.industry, c.tags
+     FROM employment e LEFT JOIN companies c ON c.id = e.company_id
+     WHERE e.person_id = ? ORDER BY e.is_current DESC, e.start_date DESC`,
     p.id,
   );
   const schools = all<{ school: string; degree: string | null }>(
@@ -53,7 +57,7 @@ export function buildDocument(p: PersonRow) {
   const place = [p.city, p.region, p.country].filter(Boolean).join(", ");
   const orgs = jobs.map(
     (j) =>
-      `${j.title ? `${j.title} at ` : ""}${j.company}${j.start_date ? ` (${j.start_date.slice(0, 4)}–${j.is_current ? "now" : (j.end_date?.slice(0, 4) ?? "?")})` : ""}`,
+      `${j.title ? `${j.title} at ` : ""}${j.company}${j.industry ? ` [${j.industry}]` : ""}${j.start_date ? ` (${j.start_date.slice(0, 4)}–${j.is_current ? "now" : (j.end_date?.slice(0, 4) ?? "?")})` : ""}`,
   );
   const lines = [
     `${p.display_name}${p.headline ? ` — ${p.headline}` : ""}`,
@@ -83,7 +87,12 @@ export function buildDocument(p: PersonRow) {
         .join(" "),
       headline: [p.headline, p.title].filter(Boolean).join(" "),
       orgs:
-        jobs.map((j) => `${j.company} ${j.title ?? ""}`).join(" ") +
+        jobs
+          .map(
+            (j) =>
+              `${j.company} ${j.title ?? ""} ${j.industry ?? ""} ${j.tags ? (JSON.parse(j.tags) as string[]).join(" ") : ""}`,
+          )
+          .join(" ") +
         " " +
         schools.map((s) => s.school).join(" "),
       places: place,

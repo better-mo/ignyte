@@ -6,6 +6,9 @@ import { all, get, run } from "../db/index.ts";
 import { Conversation } from "../agent/chat.ts";
 import { personProfile, toolByName } from "../agent/tools.ts";
 import { enrichPeople } from "../enrich/index.ts";
+import { findCompany } from "../companies/index.ts";
+import { enrichCompanies } from "../companies/enrich.ts";
+import { companyProfile } from "../companies/profile.ts";
 import { findWarmPaths, getPerson, me } from "../graph/query.ts";
 import { indexDocuments } from "../index/documents.ts";
 import { searchPeople } from "../index/search.ts";
@@ -159,6 +162,19 @@ export function startServer(port = config.port) {
           indexDocuments();
         }
         return json(res, 200, personProfile(getPerson(person.id) ?? person));
+      }
+
+      const companyMatch = p.match(/^\/api\/company\/([^/]+)(\/enrich)?$/);
+      if (companyMatch) {
+        const c = findCompany(decodeURIComponent(companyMatch[1]));
+        if (!c) return json(res, 404, { error: "not found" });
+        if (companyMatch[2]) {
+          if (req.method !== "POST")
+            return json(res, 405, { error: "POST only" });
+          await enrichCompanies({ companyIds: [c.id], force: true }, () => {});
+          indexDocuments();
+        }
+        return json(res, 200, companyProfile(findCompany(c.id) ?? c));
       }
 
       if (p === "/api/graph")

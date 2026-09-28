@@ -23,6 +23,8 @@ const { readCsv, looseDate } = await import("../src/sources/files.ts");
 const { parseYtd } = await import("../src/sources/x.ts");
 const { mapPdl } = await import("../src/enrich/providers.ts");
 const { ftsQuery } = await import("../src/index/search.ts");
+const { canonicalKey, normalizeDomain } =
+  await import("../src/companies/index.ts");
 
 test("email normalization folds gmail dots and plus tags", () => {
   assert.equal(
@@ -224,4 +226,11 @@ test("fts query drops stopwords", () => {
     ftsQuery("who leads the support team?"),
     `"leads"* OR "support"* OR "team"*`,
   );
+});
+
+test("company keys fold renames and domains normalize", () => {
+  assert.equal(canonicalKey("Facebook, Inc."), "meta");
+  assert.equal(canonicalKey("Meta Platforms"), "meta");
+  assert.equal(normalizeDomain("https://www.Shopify.com/about"), "shopify.com");
+  assert.equal(normalizeDomain("not a domain"), null);
 });

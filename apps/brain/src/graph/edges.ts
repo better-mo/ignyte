@@ -88,7 +88,7 @@ export function computeEdges() {
     end_date: string | null;
     is_current: number;
   }>(
-    `SELECT e.person_id, e.company, e.company_key, e.title, e.start_date, e.end_date, e.is_current
+    `SELECT e.person_id, e.company, COALESCE(e.company_id, 'k:' || e.company_key) AS company_key, e.title, e.start_date, e.end_date, e.is_current
      FROM employment e JOIN people p ON p.id = e.person_id AND p.is_me = 0`,
   );
   const byCompany = new Map<string, typeof jobs>();

@@ -262,7 +262,10 @@ function renderCard(card) {
   const draft = card.draft
     ? `<div class="draft"><button data-copy>Copy</button>${esc(card.draft)}</div>`
     : "";
-  c.innerHTML = `<div class="kind">${esc(card.kind)}</div><h3 class="card-title">${esc(card.title)}</h3>${body}${events}${draft}`;
+  const company = card.company
+    ? `<button class="company-strip" data-company="${esc(card.company.id)}"><b>${esc(card.company.name)}</b><span class="muted">${esc([card.company.industry, card.company.location, card.company.domain].filter(Boolean).join(" · "))}</span></button>`
+    : "";
+  c.innerHTML = `<div class="kind">${esc(card.kind)}</div><h3 class="card-title">${esc(card.title)}</h3>${company}${body}${events}${draft}`;
   c.querySelector("[data-copy]")?.addEventListener("click", (e) => {
     navigator.clipboard.writeText(card.draft);
     e.target.textContent = "Copied";
@@ -270,9 +273,87 @@ function renderCard(card) {
 }
 
 document.addEventListener("click", (e) => {
+  const company = e.target.closest("[data-company]");
+  if (company) return openCompany(company.dataset.company);
   const el = e.target.closest("[data-person]");
   if (el) openPerson(el.dataset.person);
 });
+
+const companyLink = (id, name) =>
+  id
+    ? `<button class="link" data-company="${esc(id)}">${esc(name)}</button>`
+    : `<b>${esc(name)}</b>`;
+
+// ---------- company drawer ----------
+async function openCompany(id) {
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  $("#drawerBody").innerHTML = `<p class="muted">Loading…</p>`;
+  renderCompany(await api(`/api/company/${encodeURIComponent(id)}`));
+}
+
+function renderCompany(c) {
+  const section = (title, html) =>
+    html ? `<div class="section"><h4>${title}</h4>${html}</div>` : "";
+  const personRow = (p, sub) =>
+    `<div><button class="person-chip" data-person="${esc(p.id)}">${avatar(p)}<span><span class="name">${esc(p.name)}</span><br><span class="sub">${esc(sub)}</span></span></button></div>`;
+  const facts = [
+    c.industry,
+    c.size,
+    c.location,
+    c.founded ? `founded ${c.founded}` : null,
+    c.funding_stage,
+  ].filter(Boolean);
+  $("#drawerBody").innerHTML = `
+    <div class="profile-head"><span class="avatar company">${esc(initials(c.name))}</span><div><h3>${esc(c.name)}</h3>
+      <div class="muted">${esc(facts.join(" · ") || "Not enriched yet")}</div>
+      <div class="tier">${c.counts.current} current · ${c.counts.alumni} alumni in your network</div></div></div>
+    <div class="actions">
+      ${c.domain ? `<a class="btn" href="https://${esc(c.domain)}" target="_blank" rel="noreferrer">${esc(c.domain)}</a>` : ""}
+      ${c.linkedin ? `<a class="btn" href="${esc(c.linkedin)}" target="_blank" rel="noreferrer">LinkedIn</a>` : ""}
+      <button class="btn" data-act="enrich">${c.enriched ? "Refresh company data" : "Enrich company"}</button>
+    </div>
+    ${c.description ? `<p class="section">${esc(c.description)}</p>` : ""}
+    ${section(
+      "Best ways in",
+      c.warm_paths.length
+        ? `<div class="timeline">${c.warm_paths
+            .slice(0, 3)
+            .map(
+              (w) =>
+                `<div>${w.people
+                  .slice(1)
+                  .map(
+                    (x) =>
+                      `<button class="link" data-person="${esc(x.id)}">${esc(x.name)}</button>`,
+                  )
+                  .join(
+                    " → ",
+                  )}<small>${esc([w.target_role, ...(w.hops.at(-1)?.evidence ?? []).slice(0, 2)].filter(Boolean).join(" · "))}</small></div>`,
+            )
+            .join("")}</div>`
+        : "",
+    )}
+    ${section("Works there now", c.current_people.length ? `<div class="timeline">${c.current_people.map((p) => personRow(p, [p.role, ...(p.how_you_know_them ?? [])].join(" · "))).join("")}</div>` : "")}
+    ${section("Used to work there", c.alumni.length ? `<div class="timeline">${c.alumni.map((p) => personRow(p, p.role)).join("")}</div>` : "")}
+    ${section("Mentioned in", c.recent_mentions.length ? `<div class="timeline">${c.recent_mentions.map((m) => `<div>${esc(m.subject || m.snippet || m.kind)}<small>${esc(m.kind.replace("_", " "))}${m.community ? ` · ${esc(m.community)}` : ""} · ${ago(m.occurred_at)}${m.people ? ` · ${esc(m.people.replace(/ \[p_[^\]]+\]/g, ""))}` : ""}</small></div>`).join("")}</div>` : "")}
+    ${c.tags.length ? section("Tags", badges(c.tags)) : ""}
+    ${section("Also known as", `<span class="muted">${esc([...c.also_known_as, ...c.domains].join(", "))}</span>`)}
+  `;
+  $("#drawerBody [data-act=enrich]")?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    e.target.textContent = "Working…";
+    try {
+      renderCompany(
+        await api(`/api/company/${encodeURIComponent(c.id)}/enrich`, {
+          method: "POST",
+        }),
+      );
+    } catch (err) {
+      e.target.textContent = err.message;
+    }
+  });
+}
 
 // ---------- person drawer ----------
 const drawer = $("#drawer");
@@ -311,7 +392,7 @@ function renderPerson(p) {
       <button class="btn" data-act="hide">Hide</button>
     </div>
     ${section("How you know them", list(p.how_you_know_them.map(esc)))}
-    ${section("Career", list(p.career.map((j) => `${esc(j.title ?? "")}${j.title ? " at " : ""}<b>${esc(j.company)}</b>${j.start_date ? ` <span class="muted">${esc(j.start_date.slice(0, 4))}–${j.is_current ? "now" : esc(j.end_date?.slice(0, 4) ?? "?")}</span>` : ""}`)))}
+    ${section("Career", list(p.career.map((j) => `${esc(j.title ?? "")}${j.title ? " at " : ""}${companyLink(j.company_id, j.company)}${j.industry ? ` <span class="muted">· ${esc(j.industry)}</span>` : ""}${j.start_date ? ` <span class="muted">${esc(j.start_date.slice(0, 4))}–${j.is_current ? "now" : esc(j.end_date?.slice(0, 4) ?? "?")}</span>` : ""}`)))}
     ${section("Education", list(p.education.map((s) => `${esc(s.school)}${s.degree ? ` <span class="muted">${esc(s.degree)}</span>` : ""}`)))}
     ${section("Communities", p.communities.length ? badges(p.communities.map((c) => (p.shared_communities_with_you.includes(c) ? `${c} (you too)` : c))) : "")}
     ${section("Knows in your network", p.knows.length ? `<div class="timeline">${p.knows.map((k) => `<div><button class="person-chip" data-person="${esc(k.id)}"><span class="name">${esc(k.name)}</span></button><small>${esc(k.evidence.join(" · "))}</small></div>`).join("")}</div>` : "")}
