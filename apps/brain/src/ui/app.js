@@ -958,6 +958,23 @@ async function loadGraph(refetch = true) {
   draw();
 }
 
+// ---------- filtered (not a person) ----------
+async function loadFiltered() {
+  const rows = await api("/api/filtered");
+  const el = $("#filtered");
+  if (!el) return;
+  el.innerHTML = `<h3>Filtered out as not a person</h3>
+    <p class="muted">${rows.length ? `${rows.length} automated senders, shared inboxes and rooms are kept out of your network. Restore anyone real.` : "Nothing filtered."}</p>
+    ${rows.length ? `<details><summary>Show list</summary><div class="filtered-list">${rows.map((r) => `<div><span><b>${esc(r.name)}</b><small>${esc([r.email, r.reason.replace(/^auto:\s*/, "")].filter(Boolean).join(" · "))}</small></span><button class="btn small" data-restore="${esc(r.id)}">Restore</button></div>`).join("")}</div></details>` : ""}`;
+  el.querySelectorAll("[data-restore]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      await api(`/api/person/${encodeURIComponent(b.dataset.restore)}/hide`, { method: "POST" });
+      b.closest("div").remove();
+    }),
+  );
+}
+
 // ---------- sources ----------
 async function loadSources() {
   const o = await api("/api/overview");
@@ -997,7 +1014,9 @@ async function loadSources() {
     ${block("Phone contacts", acct("phone").length ? `${count("phone")} people · ${state(acct("phone")[0])}` : "Not imported.", "npm run brain -- import vcf ~/Downloads/contacts.vcf")}
     ${block("Communities", o.communities.length ? o.communities.map((c) => `${esc(c.name)} (${c.members})`).join(", ") : "None yet.", "npm run brain -- import communities members.csv\nnpm run brain -- import community-activity posts.csv")}
     ${block("Enrichment", `${o.enriched ?? 0} profiles enriched`, "npm run brain -- enrich --limit 25")}
+    <div class="source" id="filtered"></div>
   `;
+  loadFiltered();
 }
 
 // ---------- boot ----------

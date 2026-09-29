@@ -3,7 +3,7 @@ import { resolveCompanies } from "./companies/index.ts";
 import { computeEdges } from "./graph/edges.ts";
 import { computeStrength } from "./graph/strength.ts";
 import { rebuildAllPeople } from "./identity/profile.ts";
-import { promoteAddresses } from "./identity/promote.ts";
+import { hideNonPeople, promoteAddresses } from "./identity/promote.ts";
 import {
   linkParticipants,
   relinkOrphans,
@@ -30,9 +30,14 @@ export async function rebuild(
   if (merged) rebuildAllPeople();
   linkParticipants();
   const companies = resolveCompanies();
+  const filtered = hideNonPeople();
   log(
     `  identity: ${merged} same-name merges, ${relinked} orphan records re-linked`,
   );
+  if (filtered.hidden || filtered.restored)
+    log(
+      `  filtered: ${filtered.hidden} automated senders, inboxes and rooms hidden${filtered.restored ? `, ${filtered.restored} restored` : ""}`,
+    );
   log(`  companies: ${companies}`);
   log(`  strength: scored ${computeStrength()} people`);
   log(`  graph: ${computeEdges()} person↔person edges`);

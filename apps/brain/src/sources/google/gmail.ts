@@ -11,6 +11,7 @@ import {
   upsertObservation,
 } from "../../identity/store.ts";
 import type { Interaction, Participant } from "../../model.ts";
+import { isRelayedName } from "../../identity/automated.ts";
 import { gget, pool, saveSyncState, type GoogleAccount } from "./auth.ts";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -25,6 +26,7 @@ const HEADERS = [
   "List-Unsubscribe",
   "Precedence",
   "Auto-Submitted",
+  "Feedback-ID",
 ];
 
 export type GmailMessage = {
@@ -105,25 +107,39 @@ export function mapGmailMessage(
   const cc = parseAddressList(h.get("cc"));
   const list = parseListId(h.get("list-id"));
   const fromMe = mine.has(from.email) || (msg.labelIds ?? []).includes("SENT");
+  // Gmail's own classifier: Promotions/Social/Forums are never 1:1 human mail; Updates
+  // (receipts, e-signature, notifications) is kept as a softer signal for sender reputation.
+  const category = (msg.labelIds ?? [])
+    .find((l) => l.startsWith("CATEGORY_") && l !== "CATEGORY_PERSONAL")
+    ?.slice(9)
+    .toLowerCase();
   const bulk =
     !fromMe &&
     (!!h.get("list-unsubscribe") ||
+      !!h.get("feedback-id") ||
       /bulk|list|junk/i.test(h.get("precedence") ?? "") ||
       /auto-/i.test(h.get("auto-submitted") ?? "") ||
-      looksAutomated(from.email));
+      category === "promotions" ||
+      category === "social" ||
+      category === "forums" ||
+      looksAutomated(from.email) ||
+      isRelayedName(from.name));
+  // "Jane via Docusign <dse@docusign.net>": Jane's name must not become the relay's identity.
+  const nameFor = (a: { email: string; name?: string }) =>
+    isRelayedName(a.name) || looksAutomated(a.email) ? undefined : a.name;
 
   const participants: Participant[] = [
-    { handleKind: "email", handle: from.email, name: from.name, role: "from" },
+    { handleKind: "email", handle: from.email, name: nameFor(from), role: "from" },
     ...to.map((a) => ({
       handleKind: "email" as const,
       handle: a.email,
-      name: a.name,
+      name: nameFor(a),
       role: "to" as const,
     })),
     ...cc.map((a) => ({
       handleKind: "email" as const,
       handle: a.email,
-      name: a.name,
+      name: nameFor(a),
       role: "cc" as const,
     })),
   ];
@@ -146,7 +162,10 @@ export function mapGmailMessage(
     url: `https://mail.google.com/mail/u/${account.email}/#all/${msg.id}`,
     isBulk: bulk && !communityId,
     communityId,
-    meta: list ? { listId: list.id, listName: list.name } : {},
+    meta: {
+      ...(list ? { listId: list.id, listName: list.name } : {}),
+      ...(category ? { category } : {}),
+    },
     participants,
   };
 }

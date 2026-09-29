@@ -1,5 +1,6 @@
 import { all, run, tx } from "../db/index.ts";
-import { looksAutomated, ROOM_NAME } from "./normalize.ts";
+import { automatedAddressReason, looksLikePerson } from "./automated.ts";
+import { looksAutomated } from "./normalize.ts";
 import {
   linkParticipants,
   myEmails,
@@ -65,62 +66,138 @@ export function demoteBroadcastLists(): number {
   return broadcast.length;
 }
 
-/** Hide records that are rooms, calendars or robots rather than people (reversible from the UI). */
-export function hideNonPeople(): number {
-  const rows = all<{ id: string; display_name: string; emails: string | null; others: number }>(
-    `SELECT p.id, p.display_name,
-            (SELECT group_concat(value, ' ') FROM identifiers i WHERE i.person_id = p.id AND i.kind = 'email') AS emails,
-            (SELECT COUNT(*) FROM identifiers i WHERE i.person_id = p.id AND i.kind != 'email') AS others
-     FROM people p WHERE p.is_me = 0 AND p.hidden = 0`,
+type SenderStats = {
+  key: string;
+  inbound: number; // emails they sent you
+  inbound_bulk: number; // …of which bulk / notification-style
+  direct_out: number; // emails you sent them directly (To:, small recipient list)
+  cc_out: number; // emails you only cc'd them on
+  replied: number; // non-bulk replies from them in threads you wrote in
+  meetings: number; // past meetings of ≤ 25 people
+  posts: number; // community list posts
+};
+
+/** How you and an address (or a person) actually exchange mail: the behavioural layer. */
+function senderStats(by: "handle" | "person"): SenderStats[] {
+  const col = by === "handle" ? "pa.handle" : "pa.person_id";
+  const filter =
+    by === "handle"
+      ? "pa.handle_kind = 'email' AND pa.person_id IS NULL"
+      : "pa.person_id IS NOT NULL";
+  return all<SenderStats>(
+    `WITH n AS (SELECT interaction_id, COUNT(*) AS c FROM participants GROUP BY interaction_id)
+     SELECT ${col} AS key,
+       SUM(CASE WHEN i.kind = 'email' AND i.direction = 'in' AND pa.role = 'from' THEN 1 ELSE 0 END) AS inbound,
+       SUM(CASE WHEN i.kind = 'email' AND i.direction = 'in' AND pa.role = 'from'
+                 AND (i.is_bulk = 1 OR json_extract(i.meta, '$.category') = 'updates') THEN 1 ELSE 0 END) AS inbound_bulk,
+       SUM(CASE WHEN i.kind = 'email' AND i.direction = 'out' AND pa.role = 'to' AND n.c <= 11 THEN 1 ELSE 0 END) AS direct_out,
+       SUM(CASE WHEN i.kind = 'email' AND i.direction = 'out' AND pa.role = 'cc' THEN 1 ELSE 0 END) AS cc_out,
+       SUM(CASE WHEN i.kind = 'email' AND i.direction = 'in' AND pa.role = 'from' AND i.is_bulk = 0
+                 AND COALESCE(json_extract(i.meta, '$.category'), '') != 'updates'
+                 AND i.thread_id IN (SELECT thread_id FROM interactions WHERE direction = 'out' AND thread_id IS NOT NULL)
+            THEN 1 ELSE 0 END) AS replied,
+       SUM(CASE WHEN i.kind = 'meeting' AND i.occurred_at <= datetime('now') AND n.c <= 25 THEN 1 ELSE 0 END) AS meetings,
+       SUM(CASE WHEN i.kind = 'community_post' AND pa.role = 'from' THEN 1 ELSE 0 END) AS posts
+     FROM participants pa JOIN interactions i ON i.id = pa.interaction_id JOIN n ON n.interaction_id = i.id
+     WHERE ${filter}
+     GROUP BY ${col}`,
+  );
+}
+
+/** Mostly bulk/notification mail and you've never written to them or met: a machine. */
+export function isMachineSender(s: Omit<SenderStats, "key">): boolean {
+  return (
+    s.inbound >= 3 &&
+    s.inbound_bulk / s.inbound >= 0.8 &&
+    s.direct_out === 0 &&
+    s.meetings === 0
+  );
+}
+
+/** Enough two-way signal to create a person from a bare address. */
+export function worthPromoting(s: Omit<SenderStats, "key">): boolean {
+  if (isMachineSender(s)) return false;
+  // Being cc'd, or one stray reply in a notification thread, isn't a relationship.
+  return s.direct_out >= 1 || s.meetings >= 1 || s.posts >= 1 || s.replied >= 2;
+}
+
+/**
+ * Re-check every visible person with the current rules and hide the ones that aren't
+ * human (reversible: restoring one marks it "keep" and it's never auto-hidden again).
+ * People hidden by an older rule that no longer applies come back.
+ */
+export function hideNonPeople(): { hidden: number; restored: number } {
+  const stats = new Map(senderStats("person").map((s) => [s.key, s]));
+  const people = all<{
+    id: string;
+    display_name: string;
+    hidden: number;
+    hidden_reason: string | null;
+    emails: string | null;
+    linkedin: number;
+    phones: number;
+  }>(
+    `SELECT p.id, p.display_name, p.hidden, p.hidden_reason,
+       (SELECT group_concat(value, ' ') FROM identifiers i WHERE i.person_id = p.id AND i.kind = 'email') AS emails,
+       (SELECT COUNT(*) FROM identifiers i WHERE i.person_id = p.id AND i.kind = 'linkedin') AS linkedin,
+       (SELECT COUNT(*) FROM identifiers i WHERE i.person_id = p.id AND i.kind = 'phone') AS phones
+     FROM people p
+     WHERE p.is_me = 0 AND COALESCE(p.hidden_reason, '') != 'keep'
+       AND (p.hidden = 0 OR p.hidden_reason LIKE 'auto:%')`,
   );
   let hidden = 0;
+  let restored = 0;
   tx(() => {
-    for (const r of rows) {
-      const emails = r.emails?.split(" ") ?? [];
-      const robot = emails.length > 0 && !r.others && emails.every(looksAutomated);
-      if (robot || ROOM_NAME.test(r.display_name)) {
-        run("UPDATE people SET hidden = 1 WHERE id = ?", r.id);
+    for (const p of people) {
+      const emails = p.emails?.split(" ").filter(Boolean) ?? [];
+      const s = stats.get(p.id);
+      // Addresses that belong to a service, not this person, are detached from them.
+      for (const e of emails.filter(looksAutomated))
+        run("DELETE FROM identifiers WHERE kind = 'email' AND value = ?", e);
+      const human = emails.filter((e) => !looksAutomated(e));
+      // Things only a person has: a LinkedIn profile, a real meeting, mail you wrote to them.
+      const vouched = p.linkedin > 0 || (s?.meetings ?? 0) > 0 || (s?.direct_out ?? 0) > 0;
+      let reason: string | null = null;
+      if (emails.length && !human.length && !p.linkedin && !p.phones)
+        reason = automatedAddressReason(emails[0]) ?? "automated address";
+      else if (!looksLikePerson(p.display_name) && !p.linkedin)
+        reason = "name of an organisation, inbox or room";
+      else if (!vouched && s && isMachineSender(s)) reason = "only sends automated mail";
+      if (reason && !p.hidden) {
+        run("UPDATE people SET hidden = 1, hidden_reason = ? WHERE id = ?", `auto: ${reason}`, p.id);
         hidden++;
+      } else if (!reason && p.hidden) {
+        run("UPDATE people SET hidden = 0, hidden_reason = NULL WHERE id = ?", p.id);
+        restored++;
       }
     }
   });
-  return hidden;
+  return { hidden, restored };
 }
 
 export function promoteAddresses(log = console.log): number {
   const demoted = demoteBroadcastLists();
-  const rooms = hideNonPeople();
-  if (rooms) log(`  hid ${rooms} rooms, calendars and robot addresses`);
+
   if (demoted)
     log(`  lists: ${demoted} newsletter-style lists treated as bulk mail`);
   linkParticipants();
   const mine = myEmails();
-  const now = new Date().toISOString();
-  const candidates = all<{
-    email: string;
-    name: string | null;
-    sent_to: number;
-    replied: number;
-    meetings: number;
-    posts: number;
-  }>(
-    `SELECT pa.handle AS email, MAX(pa.name) AS name,
-       SUM(CASE WHEN i.kind = 'email' AND i.direction = 'out' AND pa.role IN ('to', 'cc') THEN 1 ELSE 0 END) AS sent_to,
-       SUM(CASE WHEN i.kind = 'email' AND i.direction = 'in' AND pa.role = 'from' AND i.is_bulk = 0
-                 AND i.thread_id IN (SELECT thread_id FROM interactions WHERE direction = 'out' AND thread_id IS NOT NULL)
-            THEN 1 ELSE 0 END) AS replied,
-       SUM(CASE WHEN i.kind = 'meeting' AND i.occurred_at <= ? THEN 1 ELSE 0 END) AS meetings,
-       SUM(CASE WHEN i.kind = 'community_post' AND pa.role = 'from' THEN 1 ELSE 0 END) AS posts
-     FROM participants pa JOIN interactions i ON i.id = pa.interaction_id
-     WHERE pa.handle_kind = 'email' AND pa.person_id IS NULL
-     GROUP BY pa.handle`,
-    now,
+  const names = new Map(
+    all<{ handle: string; name: string | null }>(
+      "SELECT handle, MAX(name) AS name FROM participants WHERE handle_kind = 'email' AND person_id IS NULL GROUP BY handle",
+    ).map((r) => [r.handle, r.name]),
   );
+  const candidates = senderStats("handle").map((s) => ({
+    ...s,
+    email: s.key,
+    name: names.get(s.key) ?? null,
+    sent_to: s.direct_out + s.cc_out,
+  }));
   let created = 0;
   tx(() => {
     for (const c of candidates) {
       if (mine.has(c.email) || looksAutomated(c.email)) continue;
-      if (c.sent_to + c.replied + c.meetings + c.posts === 0) continue;
+      if (!worthPromoting(c)) continue;
       const source =
         c.sent_to + c.replied > 0
           ? "gmail"

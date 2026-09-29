@@ -214,6 +214,10 @@ function migrate(d: DatabaseSync) {
   d.exec(
     "CREATE INDEX IF NOT EXISTS employment_company_id ON employment(company_id)",
   );
+  // Why someone is hidden: "auto: …" (a rule, re-checked every rebuild), "user", or "keep".
+  if (!cols("people").includes("hidden_reason")) {
+    d.exec("ALTER TABLE people ADD COLUMN hidden_reason TEXT");
+  }
 }
 
 let instance: DatabaseSync | null = null;

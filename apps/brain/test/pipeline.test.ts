@@ -290,3 +290,33 @@ test("rebuild survives enrichment rows saved with locked-field placeholders", as
   )!;
   assert.equal(p.company, "Figma");
 });
+
+test("a DocuSign relay never becomes a contact, and old ones are hidden on rebuild", async () => {
+  const { saveInteraction, upsertObservation } = await import("../src/identity/store.ts");
+  const { mapGmailMessage } = await import("../src/sources/google/gmail.ts");
+  const { rebuild } = await import("../src/pipeline.ts");
+  const { all } = await import("../src/db/index.ts");
+  const acct = { id: "google:me@acme.io", email: "me@acme.io" };
+  const mine = new Set(["me@acme.io"]);
+  const mk = (id: string, from: string, to: string, extra: any = {}) =>
+    mapGmailMessage(
+      {
+        id, threadId: `t-${id}`, internalDate: String(Date.now() - 86400000), snippet: "Please review",
+        labelIds: extra.labels ?? [],
+        payload: { headers: [
+          { name: "Message-ID", value: `<${id}@x>` }, { name: "From", value: from }, { name: "To", value: to },
+          { name: "Subject", value: "Please DocuSign: Contract" },
+        ] },
+      },
+      acct,
+      mine,
+    )!;
+  // You even replied to the envelope email once: still not a person.
+  saveInteraction(mk("d1", '"Jane Smith via Docusign" <dse_NA3@docusign.net>', "me@acme.io"));
+  saveInteraction(mk("d2", "me@acme.io", "dse_NA3@docusign.net"));
+  // A contact created before the rules existed.
+  upsertObservation("gmail", "", "legacy", { name: "Docusign Team", emails: [] });
+  await rebuild(() => {}, { embed: false });
+  const visible = all<{ display_name: string }>("SELECT display_name FROM people WHERE hidden = 0 AND is_me = 0");
+  assert.ok(!visible.some((p) => /docusign|jane smith/i.test(p.display_name)), JSON.stringify(visible));
+});

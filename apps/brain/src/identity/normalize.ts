@@ -105,26 +105,8 @@ export function splitName(full: string): { first: string; last: string } {
   return { first: parts.slice(0, -1).join(" "), last: parts[parts.length - 1] };
 }
 
-const NOREPLY =
-  /(no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounce|newsletter|updates?|alerts?|support|billing|invoice|receipts?|hello|info|team|news|marketing|feedback|calendar-notification|automated|digest)@/i;
-// Email-service-provider domains and marketing subdomains (mail.x.com), not employers.
-const BULK_DOMAINS =
-  /@((.*\.)?(mailchimp|mcsv|sendgrid|mandrillapp|amazonses|intercom-mail|hubspotemail|mktomail|sparkpostmail|mailgun|customeriomail|substack)\.(com|net|io)|(mail|email|e|em|news|newsletter|notifications?|info|marketing|updates|alerts|mailer|bounce|reply)\.[^@]+)$/i;
-
-// Per-member relay addresses of community platforms: not a person's real email.
-const RELAY =
-  /@(members|groups)\.mobilize\.io$|@(reply|replies|relay)\.[^@]+$/i;
-// Calendar rooms, shared calendars and invite robots.
-const CALENDAR =
-  /@(resource|group|import)\.calendar\.google\.com$|^calendar-(notification|server)@/i;
-/** Names that are rooms or resources, not people ("Meeting room 3", "Boardroom (8)"). */
-export const ROOM_NAME =
-  /\b(meeting|conference|board|huddle|phone|focus)[ -]?(room|booth)\b|^room\b|\broom \d|\(\d+\)\s*$|\bresource\b/i;
-
-export function looksAutomated(email: string): boolean {
-  if (RELAY.test(email) || CALENDAR.test(email)) return true;
-  return NOREPLY.test(email) || BULK_DOMAINS.test(email);
-}
+// Human-or-robot rules live in one place; re-exported here for existing callers.
+export { looksAutomated, ROOM_NAME } from "./automated.ts";
 
 /** Best-effort: company name from a work email domain. */
 export function domainOf(email: string): string {

@@ -225,7 +225,11 @@ export function startServer(port = config.port) {
           );
           indexDocuments();
         } else if (action === "hide") {
-          run("UPDATE people SET hidden = 1 - hidden WHERE id = ?", person.id);
+          // Restoring someone a rule hid marks them "keep" so no rule hides them again.
+          run(
+            "UPDATE people SET hidden = 1 - hidden, hidden_reason = CASE WHEN hidden = 1 THEN 'keep' ELSE 'user' END WHERE id = ?",
+            person.id,
+          );
         } else if (action === "enrich") {
           await enrichPeople({ personIds: [person.id], force: true }, () => {});
           indexDocuments();
@@ -259,6 +263,17 @@ export function startServer(port = config.port) {
         else confirmCandidate(key, body.role || undefined);
         return json(res, 200, onboarding());
       }
+
+      if (p === "/api/filtered")
+        return json(
+          res,
+          200,
+          all(
+            `SELECT id, display_name AS name, hidden_reason AS reason,
+               (SELECT value FROM identifiers i WHERE i.person_id = people.id AND i.kind = 'email' LIMIT 1) AS email
+             FROM people WHERE hidden = 1 AND hidden_reason LIKE 'auto:%' ORDER BY display_name LIMIT 500`,
+          ),
+        );
 
       if (p === "/api/communities") return json(res, 200, listCommunities());
 

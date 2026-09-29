@@ -6,21 +6,8 @@ import { providers } from "./providers.ts";
 import { RateLimitError } from "./http.ts";
 import type { EnrichmentResult } from "./types.ts";
 
-const ROLE_NAME =
-  /^(info|hello|hi|team|support|help|admin|sales|billing|accounts?|notes?|client ?services|customer ?(service|success|care)|noreply|no-reply|contact|office|hr|jobs|careers|press|marketing|finance|legal|security|ops|operations)$/i;
-const ORG_WORD =
-  /\b(team|inc\.?|llc|ltd|corp(oration)?|bank|trust|group|wires|services|support|notifications?|newsletter|digest|alerts?|hq|foundation|capital|ventures|partners|labs?|studio|agency)\b/i;
-
-/** Names that are clearly an inbox, team or organisation rather than a person. */
-export function looksLikePerson(name: string): boolean {
-  const n = name.trim();
-  if (!n || n.includes("@") || /\d{3,}/.test(n)) return false;
-  if (ROLE_NAME.test(n.replace(/[._-]+/g, " "))) return false;
-  if (ORG_WORD.test(n)) return false;
-  // One-word names are allowed only when they look like a real first name ("Sara"), not "ClientServices".
-  if (!/\s/.test(n) && /[a-z][A-Z]/.test(n)) return false;
-  return true;
-}
+export { looksLikePerson } from "../identity/automated.ts";
+import { looksLikePerson } from "../identity/automated.ts";
 
 export type EnrichOptions = {
   limit?: number;

@@ -180,6 +180,18 @@ In Claude Code: `claude mcp add people-brain -- npm --prefix /absolute/path/to/i
 ## How the brain works
 
 - **Observations → people.** Each source record is stored raw and resolved by strong identifiers: normalized email (Gmail dots and plus tags folded), E.164 phone, LinkedIn slug, and X id/handle. When a record proves two people are the same, they merge. A careful same-name pass merges LinkedIn/X-only records into their Gmail/contact twin when nothing contradicts it. Every merge is logged in `merges`; `brain merge <keep> <drop>` fixes misses.
+- **Humans only (`src/identity/automated.ts`).** Every source goes through the same checks, and every rebuild re-applies them to existing people:
+  1. **Address.** Catches role mailboxes (`billing-eu@`, `team2@`), machine-made addresses (long ids, bounce addresses), and domains that only send notifications:
+     - e-signature (`docusign.net`);
+     - CRM logging addresses (`bcc.hubspot.com`);
+     - helpdesk and tracker relays (`*.zendesk.com`, `*.atlassian.net`);
+     - email service providers.
+
+     Companies whose staff you do email (Stripe, Notion, GitHub) are only matched on robot-style addresses.
+  2. **Name.** "Jane via Docusign" relays never give Jane's name to the service's address. Organisation, inbox, room and bot names (such as "Fireflies.ai Notetaker") are filtered out.
+  3. **Behaviour.** Catches services nobody has listed. Someone who only sends you bulk mail (unsubscribe headers, `Feedback-ID`, or Gmail's Promotions, Social, Forums and Updates tabs) and whom you've never written to or met isn't a contact. A new contact also needs real two-way signal: you emailed them directly, you met, or they replied more than once. Being cc'd isn't enough.
+
+  Filtered people are hidden, not deleted. Sources → *Filtered out as not a person* lists them with the reason, and restoring one means no rule ever hides them again.
 - **Profile.** Display fields are rebuilt from all observations plus enrichment, with per-field source priority (contacts for names, enrichment for current role and location).
 - **Strength (0–100).** Weighted touches: meetings count most, then direct emails and DMs, with a one-year half-life decay, a crowd penalty for big threads, a reciprocity bonus, and static signals (in your phone or contacts, LinkedIn connection, mutual follow). This yields a tier (Inner circle, Close, Active, Acquaintance, Weak tie) and a trend (warming, steady, cooling, dormant).
 - **Graph.** Person↔person edges come from small shared threads, shared meetings, overlapping employment (`worked_together` with dates) and overlapping schools. Shared communities are computed at query time and always labeled as context.

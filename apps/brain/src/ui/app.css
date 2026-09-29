@@ -1078,3 +1078,29 @@ button.icon:hover {
     flex-direction: column;
   }
 }
+
+.filtered-list {
+  margin-top: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.filtered-list > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.filtered-list span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.filtered-list small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
