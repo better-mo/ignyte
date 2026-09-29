@@ -1,5 +1,5 @@
 import { all, run, tx } from "../db/index.ts";
-import { looksAutomated } from "./normalize.ts";
+import { looksAutomated, ROOM_NAME } from "./normalize.ts";
 import {
   linkParticipants,
   myEmails,
@@ -65,8 +65,32 @@ export function demoteBroadcastLists(): number {
   return broadcast.length;
 }
 
+/** Hide records that are rooms, calendars or robots rather than people (reversible from the UI). */
+export function hideNonPeople(): number {
+  const rows = all<{ id: string; display_name: string; emails: string | null; others: number }>(
+    `SELECT p.id, p.display_name,
+            (SELECT group_concat(value, ' ') FROM identifiers i WHERE i.person_id = p.id AND i.kind = 'email') AS emails,
+            (SELECT COUNT(*) FROM identifiers i WHERE i.person_id = p.id AND i.kind != 'email') AS others
+     FROM people p WHERE p.is_me = 0 AND p.hidden = 0`,
+  );
+  let hidden = 0;
+  tx(() => {
+    for (const r of rows) {
+      const emails = r.emails?.split(" ") ?? [];
+      const robot = emails.length > 0 && !r.others && emails.every(looksAutomated);
+      if (robot || ROOM_NAME.test(r.display_name)) {
+        run("UPDATE people SET hidden = 1 WHERE id = ?", r.id);
+        hidden++;
+      }
+    }
+  });
+  return hidden;
+}
+
 export function promoteAddresses(log = console.log): number {
   const demoted = demoteBroadcastLists();
+  const rooms = hideNonPeople();
+  if (rooms) log(`  hid ${rooms} rooms, calendars and robot addresses`);
   if (demoted)
     log(`  lists: ${demoted} newsletter-style lists treated as bulk mail`);
   linkParticipants();

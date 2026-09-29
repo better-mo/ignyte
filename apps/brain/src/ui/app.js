@@ -557,11 +557,11 @@ new IntersectionObserver(
 // grouped into angular slices (by company or community) so clusters read at a glance;
 // connections between people show on hover (or all, faintly, when toggled on).
 const TIERS = [
-  { name: "Inner circle", min: 80, color: "#2f4a37" },
-  { name: "Close", min: 60, color: "#4f7457" },
-  { name: "Active", min: 35, color: "#86a283" },
-  { name: "Acquaintance", min: 12, color: "#c2b294" },
-  { name: "Weak tie", min: 0, color: "#d6cfbf" },
+  { name: "Inner circle", min: 80, color: "var(--t0)" },
+  { name: "Close", min: 60, color: "var(--t1)" },
+  { name: "Active", min: 35, color: "var(--t2)" },
+  { name: "Acquaintance", min: 12, color: "var(--t3)" },
+  { name: "Weak tie", min: 0, color: "var(--t4)" },
 ];
 const tierOf = (s) => TIERS.find((t) => s >= t.min) ?? TIERS.at(-1);
 let graphData = null;
@@ -619,9 +619,10 @@ async function loadGraph(refetch = true) {
   const size = (s) => Math.max(2, baseSize(s) * bandOf(s).scale);
   const fade = (s) => 0.28 + 0.72 * Math.pow(s / 100, 0.7);
   const hashAngle = (id) => {
-    let h = 0;
-    for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0;
-    return h;
+    let h = 2166136261;
+    for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    h ^= h >>> 15;
+    return Math.imul(h, 2246822507) >>> 0;
   };
 
   // Angular slices: groups with 2+ people get a contiguous sector; singles fill the gaps.
@@ -653,7 +654,6 @@ async function loadGraph(refetch = true) {
   ordered.push(...solos.slice(multi.length * step));
   const total = data.nodes.length || 1;
   let cursor = -Math.PI / 2;
-  const sectors = [];
   for (const g of ordered) {
     const span = (g.nodes.length / total) * Math.PI * 2;
     const sorted = [...g.nodes].sort((a, b) => b.strength - a.strength);
@@ -662,10 +662,30 @@ async function loadGraph(refetch = true) {
     petal.forEach((n, i) => {
       n.angle = cursor + (span * (i + 0.5)) / g.nodes.length;
     });
-    if (g.nodes.length > 2 && g.label)
-      sectors.push({ label: g.label, mid: cursor + span / 2, count: g.nodes.length });
     cursor += span;
   }
+  // Then spread each ring evenly around the whole circle, keeping that order, so every
+  // ring is full and people from one company still line up across rings.
+  for (const b of bands) {
+    const ring = data.nodes
+      .filter((n) => bandOf(n.strength) === b)
+      .sort((x, y) => x.angle - y.angle);
+    const phase = ring.length ? ring[0].angle : 0;
+    ring.forEach((n, i) => {
+      n.angle = phase + (i * Math.PI * 2) / ring.length;
+    });
+  }
+  const sectors = [...groups.values()]
+    .filter((g) => g.nodes.length > 2 && g.label)
+    .map((g) => ({
+      label: g.label,
+      count: g.nodes.length,
+      mid: Math.atan2(
+        g.nodes.reduce((a, n) => a + Math.sin(n.angle), 0),
+        g.nodes.reduce((a, n) => a + Math.cos(n.angle), 0),
+      ),
+    }))
+    .sort((a, b) => b.count - a.count);
 
   const meNode = { id: "me", name: data.me?.name ?? "You", me: true, strength: 100, fx: cx, fy: cy };
   const people = data.nodes.map((n) => ({
@@ -699,13 +719,12 @@ async function loadGraph(refetch = true) {
     if (!t.count) return;
     rings
       .append("circle")
+      .attr("class", "ring")
       .attr("cx", cx)
       .attr("cy", cy)
       .attr("r", t.outer)
-      .attr("fill", t.color)
-      .attr("fill-opacity", 0.035)
-      .attr("stroke", t.color)
-      .attr("stroke-opacity", 0.35 - i * 0.06)
+      .style("fill-opacity", 0.025)
+      .style("stroke-opacity", 0.45 - i * 0.08)
       .attr("stroke-dasharray", "3 5");
     rings
       .append("text")
@@ -731,7 +750,7 @@ async function loadGraph(refetch = true) {
     .selectAll("path")
     .data(links)
     .join("path")
-    .attr("stroke", (l) => (l.kind === "worked_together" ? "#bc5c3b" : "#6f7f70"))
+    .style("stroke", (l) => (l.kind === "worked_together" ? "var(--orange)" : "var(--muted)"))
     .attr("stroke-width", (l) => Math.min(2.2, 0.5 + l.weight / 3))
     .attr("stroke-opacity", showAll ? 0.12 : 0);
 
@@ -748,10 +767,9 @@ async function loadGraph(refetch = true) {
   node
     .append("circle")
     .attr("r", (d) => (d.me ? 18 : size(d.strength)))
-    .attr("fill", (d) => (d.me ? "#bc5c3b" : tierOf(d.strength).color))
+    .style("fill", (d) => (d.me ? "var(--orange)" : tierOf(d.strength).color))
     .attr("fill-opacity", (d) => (d.me ? 1 : fade(d.strength)))
-    .attr("stroke", "#fffefa")
-    .attr("stroke-width", (d) => (d.strength >= 60 ? 1.5 : 0.8));
+    .attr("stroke-width", (d) => (d.me ? 3 : 1));
   node
     .filter((d) => d.me)
     .append("text")
@@ -761,15 +779,15 @@ async function loadGraph(refetch = true) {
     .text("You");
 
   // Names: always for close ties; the rest appear as you zoom in or hover.
-  const labelled = new Set(people.slice(0, 24).map((n) => n.id));
+  const labelled = new Set(people.filter((n) => n.strength >= 80).slice(0, 20).map((n) => n.id));
   const showLabel = (d, k = 1) =>
     !d.me && (labelled.has(d.id) || (k > 1.6 && d.strength >= 60) || (k > 2.4 && d.strength >= 35) || k > 3.4);
   const label = node
     .filter((d) => !d.me)
     .append("text")
     .attr("class", "gname")
-    .attr("text-anchor", (d) => (d.x >= cx ? "start" : "end"))
-    .attr("x", (d) => (d.x >= cx ? 1 : -1) * (size(d.strength) + 4))
+    .attr("text-anchor", (d) => (Math.cos(d.angle) >= 0 ? "start" : "end"))
+    .attr("x", (d) => (Math.cos(d.angle) >= 0 ? 1 : -1) * (size(d.strength) + 4))
     .attr("y", 3.5)
     .attr("fill-opacity", (d) => Math.max(0.55, fade(d.strength)))
     .style("font-weight", (d) => (d.strength >= 80 ? 600 : 400))

@@ -13,6 +13,12 @@
   --sans: "DM Sans", system-ui, sans-serif;
   --radius: 14px;
   --shadow: 0 14px 50px #26372b12;
+  /* Graph tiers, strongest first */
+  --t0: #2f4a37;
+  --t1: #4f7457;
+  --t2: #86a283;
+  --t3: #c2b294;
+  --t4: #d6cfbf;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -27,6 +33,11 @@
     --peach: #3a2a22;
     --soft: #202823;
     --shadow: 0 14px 50px #0006;
+    --t0: #d9ecd9;
+    --t1: #a9cdaf;
+    --t2: #6f9a7a;
+    --t3: #56665b;
+    --t4: #3f4a43;
   }
 }
 * {
@@ -567,6 +578,13 @@ button.badge {
   font-size: 11px;
   fill: var(--ink);
   pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.graph .me-label {
+  stroke: none;
 }
 .graph .ring-label {
   font-size: 10.5px;
@@ -586,6 +604,14 @@ button.badge {
 }
 .graph .gnode {
   transition: opacity 0.15s;
+}
+.graph .gnode circle {
+  stroke: var(--paper);
+}
+.graph .ring {
+  pointer-events: none;
+  fill: var(--ink);
+  stroke: var(--muted);
 }
 .graph path {
   transition: stroke-opacity 0.15s;

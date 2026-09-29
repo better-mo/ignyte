@@ -353,3 +353,26 @@ test("rate-limit wait comes from Retry-After or the reset header", async () => {
   assert.ok(w > 25_000 && w <= 31_000);
   assert.equal(waitFromHeaders(new Headers()), undefined);
 });
+
+test("strength tiers follow network layers, with an absolute floor", async () => {
+  const { strengthScale } = await import("../src/graph/strength.ts");
+  // A busy network: 600 people, all with lots of email.
+  const raws = Array.from({ length: 600 }, (_, i) => 400 - i * 0.6);
+  const scale = strengthScale(raws);
+  const scores = raws.map(scale);
+  const count = (min: number) => scores.filter((s) => s >= min).length;
+  assert.equal(count(80), 15);
+  assert.equal(count(60), 50);
+  assert.equal(count(35), 150);
+  assert.equal(count(12), 500);
+  for (let i = 1; i < scores.length; i++) assert.ok(scores[i] <= scores[i - 1]);
+  // A tiny network isn't inflated: light contact stays low.
+  const small = strengthScale([3, 2, 1]);
+  assert.ok(small(3) < 35);
+});
+
+test("calendar rooms and robots are not people", () => {
+  assert.equal(looksAutomated("c_1886abc@resource.calendar.google.com"), true);
+  assert.equal(looksAutomated("team@group.calendar.google.com"), true);
+  assert.equal(looksAutomated("sara@shopify.com"), false);
+});

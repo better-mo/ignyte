@@ -114,9 +114,15 @@ const BULK_DOMAINS =
 // Per-member relay addresses of community platforms: not a person's real email.
 const RELAY =
   /@(members|groups)\.mobilize\.io$|@(reply|replies|relay)\.[^@]+$/i;
+// Calendar rooms, shared calendars and invite robots.
+const CALENDAR =
+  /@(resource|group|import)\.calendar\.google\.com$|^calendar-(notification|server)@/i;
+/** Names that are rooms or resources, not people ("Meeting room 3", "Boardroom (8)"). */
+export const ROOM_NAME =
+  /\b(meeting|conference|board|huddle|phone|focus)[ -]?(room|booth)\b|^room\b|\broom \d|\(\d+\)\s*$|\bresource\b/i;
 
 export function looksAutomated(email: string): boolean {
-  if (RELAY.test(email)) return true;
+  if (RELAY.test(email) || CALENDAR.test(email)) return true;
   return NOREPLY.test(email) || BULK_DOMAINS.test(email);
 }
 

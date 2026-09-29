@@ -33,6 +33,51 @@ export type StrengthDetail = {
   score: number;
 };
 
+// Layer sizes (cumulative) and the score each layer starts at.
+const LAYERS = [
+  { rank: 15, score: 80 }, // Inner circle
+  { rank: 50, score: 60 }, // Close
+  { rank: 150, score: 35 }, // Active
+  { rank: 500, score: 12 }, // Acquaintance
+];
+// Minimum raw weight to reach each layer: the old absolute curve 100·(1−e^(−raw/25)).
+const rawForScore = (score: number) => -25 * Math.log(1 - score / 100);
+
+/**
+ * Map raw interaction weight to 0–100 so that the Nth strongest relationship lands on
+ * each layer boundary (e.g. #15 scores 80), never below the absolute floor for that
+ * score. Piecewise linear in log(raw) between the anchors, so order is preserved.
+ */
+export function strengthScale(raws: number[]): (raw: number) => number {
+  const sorted = raws.filter((r) => r > 0).sort((a, b) => b - a);
+  const max = Math.max(sorted[0] ?? 0, rawForScore(99));
+  const anchors: { raw: number; score: number }[] = [{ raw: max, score: 100 }];
+  for (const l of LAYERS) {
+    const atRank = sorted[l.rank - 1] ?? 0;
+    const raw = Math.min(
+      anchors.at(-1)!.raw * 0.999,
+      Math.max(atRank, rawForScore(l.score)),
+    );
+    anchors.push({ raw, score: l.score });
+  }
+  anchors.push({ raw: 0, score: 0 });
+  const f = (r: number) => Math.log1p(r);
+  return (raw: number) => {
+    if (raw <= 0) return 0;
+    if (raw >= max) return 100;
+    for (let i = 1; i < anchors.length; i++) {
+      const hi = anchors[i - 1];
+      const lo = anchors[i];
+      if (raw >= lo.raw) {
+        const t = (f(raw) - f(lo.raw)) / (f(hi.raw) - f(lo.raw) || 1);
+        // Floor, so only people at or above an anchor reach that layer's score.
+        return Math.floor(lo.score + t * (hi.score - lo.score));
+      }
+    }
+    return 0;
+  };
+}
+
 /**
  * Relationship strength (0–100) from how, how often, how recently and how mutually
  * you interact. Meetings and direct replies weigh most; mass mail barely counts.
@@ -163,14 +208,21 @@ export function computeStrength() {
     if (!v.firstAt || t.occurred_at < v.firstAt) v.firstAt = t.occurred_at;
   }
 
+  // Tiers follow the layers of human closeness (about 15 / 50 / 150 / 500 people) rather than
+  // a fixed score, so a busy inbox doesn't put 200 people in your "inner circle". A raw
+  // floor per tier keeps a small or new network from being inflated.
+  const rawOf = (v: { raw: number; inContacts: boolean; inPhone: boolean; out: boolean; in: boolean }) => {
+    const r = v.raw + (v.inContacts ? 6 : 0) + (v.inPhone ? 8 : 0);
+    return v.out && v.in ? r * 1.3 : r;
+  };
+  const scale = strengthScale([...detail.values()].map(rawOf));
+
   tx(() => {
     run(
       "UPDATE people SET strength = 0, tier = NULL, trend = NULL, strength_detail = NULL, interaction_count = 0 WHERE is_me = 0",
     );
     for (const [id, v] of detail) {
-      let raw = v.raw + (v.inContacts ? 6 : 0) + (v.inPhone ? 8 : 0);
-      if (v.out && v.in) raw *= 1.3;
-      const score = Math.round(100 * (1 - Math.exp(-raw / 25)));
+      const score = scale(rawOf(v));
       v.score = score;
       const lastAge = v.lastAt ? (now - Date.parse(v.lastAt)) / DAY : Infinity;
       const tier =
