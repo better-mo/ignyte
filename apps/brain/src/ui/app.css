@@ -554,16 +554,87 @@ button.badge {
 
 /* Graph */
 .graph {
-  height: calc(100vh - 110px);
+  height: calc(100vh - 140px);
 }
 .graph svg {
   width: 100%;
   height: 100%;
 }
+.graph {
+  position: relative;
+}
 .graph text {
   font-size: 11px;
   fill: var(--ink);
   pointer-events: none;
+}
+.graph .ring-label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  fill: var(--muted);
+}
+.graph .sector-label {
+  font-size: 11px;
+  fill: var(--muted);
+  font-style: italic;
+}
+.graph .me-label {
+  fill: var(--white);
+  font-weight: 600;
+  font-size: 11px;
+}
+.graph .gnode {
+  transition: opacity 0.15s;
+}
+.graph path {
+  transition: stroke-opacity 0.15s;
+}
+.gtip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 8px 10px;
+  max-width: 230px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  transition: opacity 0.12s;
+}
+.gtip span {
+  color: var(--ink);
+}
+.gtip small {
+  color: var(--muted);
+}
+.graph-controls label {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.graph-controls select {
+  font: inherit;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--white);
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+.graph-controls input[type="checkbox"] {
+  min-width: 0;
+  width: auto;
+  margin: 0;
+}
+.graph-hint {
+  padding: 0 32px;
+  margin: 0;
+  font-size: 12.5px;
 }
 
 /* Sources */

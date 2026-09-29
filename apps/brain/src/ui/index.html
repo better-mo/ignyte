@@ -90,11 +90,32 @@
         <section class="view" id="view-graph">
           <header class="view-head">
             <h2>Graph</h2>
-            <p class="muted">
-              Your strongest ties and how they connect to each other. Click
-              someone to open their profile.
-            </p>
+            <div class="filters graph-controls">
+              <label
+                >Show
+                <select id="gLimit">
+                  <option value="100">top 100</option>
+                  <option value="200" selected>top 200</option>
+                  <option value="400">top 400</option>
+                </select></label
+              >
+              <label
+                >Group by
+                <select id="gGroup">
+                  <option value="company" selected>company</option>
+                  <option value="community">community</option>
+                  <option value="none">nothing</option>
+                </select></label
+              >
+              <label class="check"
+                ><input type="checkbox" id="gLinks" /> all connections</label
+              >
+            </div>
           </header>
+          <p class="muted graph-hint">
+            Closer to the center means a stronger relationship. Hover someone
+            to see who they know here; click to open them. Scroll to zoom.
+          </p>
           <div class="graph" id="graph"></div>
         </section>
 

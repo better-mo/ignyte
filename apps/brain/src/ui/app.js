@@ -552,131 +552,274 @@ new IntersectionObserver(
 ).observe($("#peopleMore"));
 
 // ---------- graph ----------
-async function loadGraph() {
+// Orbit view: you in the middle, distance = how close the relationship is. Tier rings
+// mark Inner circle → Acquaintance; people fade and shrink as ties weaken. People are
+// grouped into angular slices (by company or community) so clusters read at a glance;
+// connections between people show on hover (or all, faintly, when toggled on).
+const TIERS = [
+  { name: "Inner circle", min: 80, color: "#2f4a37" },
+  { name: "Close", min: 60, color: "#4f7457" },
+  { name: "Active", min: 35, color: "#86a283" },
+  { name: "Acquaintance", min: 12, color: "#c2b294" },
+  { name: "Weak tie", min: 0, color: "#d6cfbf" },
+];
+const tierOf = (s) => TIERS.find((t) => s >= t.min) ?? TIERS.at(-1);
+let graphData = null;
+
+["#gLimit", "#gGroup", "#gLinks"].forEach((s) =>
+  $(s)?.addEventListener("change", () => loadGraph(s === "#gLimit")),
+);
+
+async function loadGraph(refetch = true) {
   const el = $("#graph");
   if (!window.d3)
     return (el.innerHTML = `<p class="muted">Graph library failed to load.</p>`);
-  const data = await api("/api/graph?limit=150");
+  const limit = Number($("#gLimit").value);
+  if (refetch || !graphData) graphData = await api(`/api/graph?limit=${limit}`);
+  const data = graphData;
+  const groupBy = $("#gGroup").value;
+  const showAll = $("#gLinks").checked;
   el.innerHTML = "";
   const { width, height } = el.getBoundingClientRect();
-  const meNode = {
-    id: "me",
-    name: "You",
-    strength: 100,
-    me: true,
-    fx: width / 2,
-    fy: height / 2,
+  const cx = width / 2;
+  const cy = height / 2;
+  const R = Math.max(220, Math.min(width, height) / 2 - 40);
+  const r0 = 46;
+  // Each tier gets a ring whose width follows how many people are in it (with a floor),
+  // so a crowded Inner circle still has room; inside a ring, stronger sits closer to you.
+  const counts = TIERS.map((t, i) =>
+    data.nodes.filter((n) => tierOf(n.strength) === t).length,
+  );
+  const weights = counts.map((c) => (c ? Math.pow(Math.max(0.1, c / (data.nodes.length || 1)), 0.6) : 0));
+  const wsum = weights.reduce((a, b) => a + b, 0);
+  const bands = [];
+  let edge = r0;
+  TIERS.forEach((t, i) => {
+    const w = ((R - r0) * weights[i]) / wsum;
+    bands.push({ ...t, inner: edge, outer: edge + w, max: i ? TIERS[i - 1].min : 100, count: counts[i] });
+    edge += w;
+  });
+  const bandOf = (s) => bands.find((b) => s >= b.min) ?? bands.at(-1);
+  const radius = (s) => {
+    const b = bandOf(s);
+    const f = (b.max - Math.min(s, b.max)) / Math.max(1, b.max - b.min);
+    return b.inner + (0.15 + 0.7 * f) * (b.outer - b.inner);
   };
-  const nodes = [meNode, ...data.nodes];
-  const links = [
-    ...data.nodes.map((n) => ({
-      source: "me",
-      target: n.id,
-      weight: n.strength / 25,
-      me: true,
-    })),
-    ...data.edges.map((e) => ({
-      source: e.a,
-      target: e.b,
-      weight: e.weight,
-      kind: e.kind,
-    })),
-  ];
-  const tierColor = {
-    "Inner circle": "#344f3c",
-    Close: "#5b7a5f",
-    Active: "#8fa88c",
-    Acquaintance: "#c9b79c",
-    "Weak tie": "#d9d4c7",
+  // Dots shrink where a ring is crowded so neighbours don't pile up.
+  for (const b of bands) {
+    const area = Math.PI * (b.outer ** 2 - b.inner ** 2);
+    const need = data.nodes
+      .filter((n) => bandOf(n.strength) === b)
+      .reduce((a, n) => a + Math.PI * (baseSize(n.strength) + 2) ** 2, 0);
+    b.scale = need > 0.35 * area ? Math.sqrt((0.35 * area) / need) : 1;
+  }
+  function baseSize(s) {
+    return 2.5 + Math.pow(s / 100, 1.3) * 8.5;
+  }
+  const size = (s) => Math.max(2, baseSize(s) * bandOf(s).scale);
+  const fade = (s) => 0.28 + 0.72 * Math.pow(s / 100, 0.7);
+  const hashAngle = (id) => {
+    let h = 0;
+    for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    return h;
   };
-  const svg = d3
-    .select(el)
-    .append("svg")
-    .attr("viewBox", [0, 0, width, height]);
+
+  // Angular slices: groups with 2+ people get a contiguous sector; singles fill the gaps.
+  const keyOf = (n) =>
+    groupBy === "company"
+      ? n.company_id || (n.company ? `n:${n.company.toLowerCase()}` : null)
+      : groupBy === "community"
+        ? n.communities[0] || null
+        : null;
+  const labelOf = (n) => (groupBy === "company" ? n.company : n.communities[0]);
+  const groups = new Map();
+  for (const n of data.nodes) {
+    const k = keyOf(n) ?? `solo:${n.id}`;
+    if (!groups.has(k)) groups.set(k, { key: k, label: labelOf(n), nodes: [] });
+    groups.get(k).nodes.push(n);
+  }
+  const multi = [...groups.values()]
+    .filter((g) => g.nodes.length > 1)
+    .sort((a, b) => b.nodes.length - a.nodes.length);
+  const solos = [...groups.values()]
+    .filter((g) => g.nodes.length === 1)
+    .sort((a, b) => hashAngle(a.key) - hashAngle(b.key));
+  // Interleave big groups with singles so no side of the circle is empty.
+  const ordered = [];
+  const step = Math.max(1, Math.floor(solos.length / Math.max(1, multi.length)));
+  multi.forEach((g, i) => {
+    ordered.push(g, ...solos.slice(i * step, (i + 1) * step));
+  });
+  ordered.push(...solos.slice(multi.length * step));
+  const total = data.nodes.length || 1;
+  let cursor = -Math.PI / 2;
+  const sectors = [];
+  for (const g of ordered) {
+    const span = (g.nodes.length / total) * Math.PI * 2;
+    const sorted = [...g.nodes].sort((a, b) => b.strength - a.strength);
+    const petal = [];
+    sorted.forEach((n, i) => (i % 2 ? petal.push(n) : petal.unshift(n)));
+    petal.forEach((n, i) => {
+      n.angle = cursor + (span * (i + 0.5)) / g.nodes.length;
+    });
+    if (g.nodes.length > 2 && g.label)
+      sectors.push({ label: g.label, mid: cursor + span / 2, count: g.nodes.length });
+    cursor += span;
+  }
+
+  const meNode = { id: "me", name: data.me?.name ?? "You", me: true, strength: 100, fx: cx, fy: cy };
+  const people = data.nodes.map((n) => ({
+    ...n,
+    x: cx + Math.cos(n.angle) * radius(n.strength),
+    y: cy + Math.sin(n.angle) * radius(n.strength),
+  }));
+  const nodes = [meNode, ...people];
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const links = data.edges
+    .filter((e) => byId.has(e.a) && byId.has(e.b))
+    .map((e) => ({ source: byId.get(e.a), target: byId.get(e.b), kind: e.kind, weight: e.weight }));
+  const neighbors = new Map(people.map((n) => [n.id, new Set()]));
+  for (const l of links) {
+    neighbors.get(l.source.id)?.add(l.target.id);
+    neighbors.get(l.target.id)?.add(l.source.id);
+  }
+
+  const svg = d3.select(el).append("svg").attr("viewBox", [0, 0, width, height]);
   const g = svg.append("g");
   svg.call(
-    d3
-      .zoom()
-      .scaleExtent([0.3, 4])
-      .on("zoom", (e) => g.attr("transform", e.transform)),
+    d3.zoom().scaleExtent([0.4, 5]).on("zoom", (e) => {
+      g.attr("transform", e.transform);
+      label.style("display", (d) => (showLabel(d, e.transform.k) ? null : "none"));
+    }),
   );
-  const sim = d3
-    .forceSimulation(nodes)
-    .force(
-      "link",
-      d3
-        .forceLink(links)
-        .id((d) => d.id)
-        .distance((l) => (l.me ? 260 - l.target.strength * 2 : 60))
-        .strength((l) => (l.me ? 0.08 : 0.4)),
-    )
-    .force("charge", d3.forceManyBody().strength(-120))
-    .force(
-      "collide",
-      d3.forceCollide().radius((d) => 6 + d.strength / 8),
-    );
+
+  // Tier rings (soft bands, darkest near you) with labels on the top edge.
+  const rings = g.append("g");
+  bands.slice(0, 4).forEach((t, i) => {
+    if (!t.count) return;
+    rings
+      .append("circle")
+      .attr("cx", cx)
+      .attr("cy", cy)
+      .attr("r", t.outer)
+      .attr("fill", t.color)
+      .attr("fill-opacity", 0.035)
+      .attr("stroke", t.color)
+      .attr("stroke-opacity", 0.35 - i * 0.06)
+      .attr("stroke-dasharray", "3 5");
+    rings
+      .append("text")
+      .attr("class", "ring-label")
+      .attr("x", cx)
+      .attr("y", cy - t.outer + 13)
+      .attr("text-anchor", "middle")
+      .text(`${t.name} · ${t.count}`);
+  });
+  rings
+    .selectAll(".sector")
+    .data(sectors.slice(0, 14))
+    .join("text")
+    .attr("class", "sector-label")
+    .attr("text-anchor", (d) => (Math.cos(d.mid) >= 0 ? "start" : "end"))
+    .attr("x", (d) => cx + Math.cos(d.mid) * (R + 14))
+    .attr("y", (d) => cy + Math.sin(d.mid) * (R + 14) + 4)
+    .text((d) => `${d.label} · ${d.count}`);
+
   const link = g
     .append("g")
-    .selectAll("line")
+    .attr("fill", "none")
+    .selectAll("path")
     .data(links)
-    .join("line")
-    .attr("stroke", (l) =>
-      l.me ? "#e6e6dd" : l.kind === "worked_together" ? "#bc5c3b" : "#8a8e83",
-    )
-    .attr("stroke-opacity", (l) => (l.me ? 0.5 : 0.7))
-    .attr("stroke-width", (l) =>
-      l.me ? 0.6 : Math.min(3, 0.6 + l.weight / 2),
-    );
+    .join("path")
+    .attr("stroke", (l) => (l.kind === "worked_together" ? "#bc5c3b" : "#6f7f70"))
+    .attr("stroke-width", (l) => Math.min(2.2, 0.5 + l.weight / 3))
+    .attr("stroke-opacity", showAll ? 0.12 : 0);
+
   const node = g
     .append("g")
     .selectAll("g")
     .data(nodes)
     .join("g")
-    .style("cursor", "pointer")
+    .attr("class", "gnode")
+    .style("cursor", (d) => (d.me ? "default" : "pointer"))
     .on("click", (_, d) => !d.me && openPerson(d.id))
-    .call(
-      d3
-        .drag()
-        .on("start", (e, d) => {
-          if (!e.active) sim.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
-        })
-        .on("drag", (e, d) => {
-          d.fx = e.x;
-          d.fy = e.y;
-        })
-        .on("end", (e, d) => {
-          if (!e.active) sim.alphaTarget(0);
-          if (!d.me) {
-            d.fx = null;
-            d.fy = null;
-          }
-        }),
-    );
+    .on("mouseenter", (_, d) => focus(d))
+    .on("mouseleave", () => focus(null));
   node
     .append("circle")
-    .attr("r", (d) => (d.me ? 14 : 4 + d.strength / 10))
-    .attr("fill", (d) => (d.me ? "#bc5c3b" : (tierColor[d.tier] ?? "#d9d4c7")))
+    .attr("r", (d) => (d.me ? 18 : size(d.strength)))
+    .attr("fill", (d) => (d.me ? "#bc5c3b" : tierOf(d.strength).color))
+    .attr("fill-opacity", (d) => (d.me ? 1 : fade(d.strength)))
     .attr("stroke", "#fffefa")
-    .attr("stroke-width", 1.5);
+    .attr("stroke-width", (d) => (d.strength >= 60 ? 1.5 : 0.8));
   node
-    .append("title")
-    .text((d) => `${d.name}${d.headline ? ` — ${d.headline}` : ""}`);
-  node
-    .filter((d) => d.me || data.nodes.length < 40 || d.strength >= 35)
+    .filter((d) => d.me)
     .append("text")
-    .attr("x", (d) => 8 + d.strength / 10)
+    .attr("class", "me-label")
+    .attr("text-anchor", "middle")
     .attr("y", 4)
+    .text("You");
+
+  // Names: always for close ties; the rest appear as you zoom in or hover.
+  const labelled = new Set(people.slice(0, 24).map((n) => n.id));
+  const showLabel = (d, k = 1) =>
+    !d.me && (labelled.has(d.id) || (k > 1.6 && d.strength >= 60) || (k > 2.4 && d.strength >= 35) || k > 3.4);
+  const label = node
+    .filter((d) => !d.me)
+    .append("text")
+    .attr("class", "gname")
+    .attr("text-anchor", (d) => (d.x >= cx ? "start" : "end"))
+    .attr("x", (d) => (d.x >= cx ? 1 : -1) * (size(d.strength) + 4))
+    .attr("y", 3.5)
+    .attr("fill-opacity", (d) => Math.max(0.55, fade(d.strength)))
+    .style("font-weight", (d) => (d.strength >= 80 ? 600 : 400))
+    .style("display", (d) => (showLabel(d) ? null : "none"))
     .text((d) => d.name);
-  sim.on("tick", () => {
-    link
-      .attr("x1", (d) => d.source.x)
-      .attr("y1", (d) => d.source.y)
-      .attr("x2", (d) => d.target.x)
-      .attr("y2", (d) => d.target.y);
+
+  const tip = d3.select(el).append("div").attr("class", "gtip").style("opacity", 0);
+  function focus(d) {
+    if (!d || d.me) {
+      node.style("opacity", 1);
+      label.style("display", (x) => (showLabel(x, d3.zoomTransform(svg.node()).k) ? null : "none"));
+      link.attr("stroke-opacity", showAll ? 0.12 : 0);
+      tip.style("opacity", 0);
+      return;
+    }
+    const near = neighbors.get(d.id) ?? new Set();
+    node.style("opacity", (x) => (x.me || x.id === d.id || near.has(x.id) ? 1 : 0.12));
+    label.style("display", (x) => (x.id === d.id || near.has(x.id) || showLabel(x) ? null : "none"));
+    link.attr("stroke-opacity", (l) => (l.source.id === d.id || l.target.id === d.id ? 0.75 : showAll ? 0.03 : 0));
+    tip
+      .html(
+        `<b>${esc(d.name)}</b><span>${esc(d.headline ?? d.company ?? "")}</span><small>${esc(tierOf(d.strength).name)} · ${Math.round(d.strength)}/100${near.size ? ` · knows ${near.size} here` : ""}</small>`,
+      )
+      .style("left", `${Math.min(width - 240, d.x + 16)}px`)
+      .style("top", `${Math.max(8, d.y - 12)}px`)
+      .style("opacity", 1);
+  }
+
+  // A short simulation just untangles overlaps; each person stays on their ring and angle.
+  const sim = d3
+    .forceSimulation(nodes)
+    .force("radial", d3.forceRadial((d) => (d.me ? 0 : radius(d.strength)), cx, cy).strength(0.9))
+    .force("x", d3.forceX((d) => (d.me ? cx : cx + Math.cos(d.angle) * radius(d.strength))).strength(0.25))
+    .force("y", d3.forceY((d) => (d.me ? cy : cy + Math.sin(d.angle) * radius(d.strength))).strength(0.25))
+    .force("collide", d3.forceCollide((d) => (d.me ? 24 : size(d.strength) + 1.5)).iterations(2))
+    .alphaDecay(0.06)
+    .stop();
+  for (let i = 0; i < 160; i++) sim.tick();
+  const draw = () => {
+    // Links curve gently toward the centre so they don't cut straight across the rings.
+    link.attr("d", (l) => {
+      const mx = (l.source.x + l.target.x) / 2;
+      const my = (l.source.y + l.target.y) / 2;
+      const qx = mx + (cx - mx) * 0.25;
+      const qy = my + (cy - my) * 0.25;
+      return `M${l.source.x},${l.source.y} Q${qx},${qy} ${l.target.x},${l.target.y}`;
+    });
     node.attr("transform", (d) => `translate(${d.x},${d.y})`);
-  });
+  };
+  draw();
 }
 
 // ---------- sources ----------

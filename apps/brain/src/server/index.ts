@@ -51,6 +51,12 @@ function graph(limit: number) {
   const communities = all<{ person_id: string; name: string }>(
     "SELECT m.person_id, c.name FROM memberships m JOIN communities c ON c.id = m.community_id",
   );
+  const jobs = new Map(
+    all<{ person_id: string; company_id: string; name: string }>(
+      `SELECT e.person_id, e.company_id, c.name FROM employment e JOIN companies c ON c.id = e.company_id
+       WHERE e.is_current = 1 ORDER BY e.start_date`,
+    ).map((j) => [j.person_id, j]),
+  );
   const byPerson = new Map<string, string[]>();
   for (const c of communities)
     byPerson.set(c.person_id, [...(byPerson.get(c.person_id) ?? []), c.name]);
@@ -62,7 +68,8 @@ function graph(limit: number) {
       id: n.id,
       name: n.display_name,
       headline: n.headline,
-      company: n.company,
+      company: jobs.get(n.id)?.name ?? n.company,
+      company_id: jobs.get(n.id)?.company_id ?? null,
       city: n.city,
       strength: n.strength,
       tier: n.tier,
