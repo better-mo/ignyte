@@ -895,3 +895,186 @@ button.badge {
 .company-strip:hover {
   border-color: var(--green);
 }
+
+/* Your map (onboarding) */
+.map {
+  padding: 36px 32px 48px;
+  max-width: 1280px;
+}
+.map-head h1 {
+  font: 400 40px/1.1 var(--serif);
+  margin: 0 0 8px;
+}
+.map-head p {
+  max-width: 720px;
+  margin: 0 0 28px;
+}
+.map-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.6fr;
+  gap: 16px;
+  align-items: start;
+}
+.map-col {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-width: 0;
+}
+.map-col h3 {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+.map-col h3 .small {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  margin-left: 6px;
+}
+.map-list {
+  display: flex;
+  flex-direction: column;
+}
+.map-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 4px;
+  border: 0;
+  background: none;
+  text-align: left;
+  border-radius: 8px;
+  cursor: pointer;
+  color: inherit;
+  min-width: 0;
+}
+.map-row:hover {
+  background: var(--soft);
+}
+.map-row > span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.map-row small,
+.small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.map-row small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-comm {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 11px 4px;
+  border-top: 1px solid var(--line);
+}
+.map-comm:first-child {
+  border-top: 0;
+}
+.map-comm-main {
+  min-width: 0;
+}
+.map-comm-name {
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+  padding: 0;
+}
+.map-comm-name:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+.role-pill {
+  font-size: 11px;
+  background: var(--peach);
+  color: var(--orange);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.map-comm .sample {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 460px;
+}
+.map-comm-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.map-comm.is-confirmed .map-comm-name {
+  color: var(--green);
+}
+.map-comm-actions .confirmed {
+  font-size: 12.5px;
+  color: var(--green);
+  font-weight: 600;
+}
+.btn.small {
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+button.icon {
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+button.icon:hover {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+.map-foot {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+.map pre {
+  background: var(--sage);
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  overflow-x: auto;
+}
+@media (max-width: 1100px) {
+  .map-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+  .map-col.wide {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+@media (max-width: 720px) {
+  .map {
+    padding: 20px 16px 32px;
+  }
+  .map-cols {
+    grid-template-columns: 1fr;
+  }
+  .map-comm {
+    flex-direction: column;
+  }
+}

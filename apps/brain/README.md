@@ -84,7 +84,24 @@ npm run brain -- import vcf ~/Downloads/contacts.vcf
 
 ### Communities
 
-Until there are direct connectors (Bettermode, Slack, Discord), communities come from Gmail mailing lists automatically, plus two CSV imports:
+**Detected automatically.** `sync` finds the communities you belong to from your email and ranks your top 10. You confirm them on the **Your map** screen, which opens on first run, or from the terminal:
+
+```sh
+npm run brain -- detect-communities          # also runs as part of sync
+npm run brain -- communities                 # review: --confirm 2 [--role host] / --dismiss 5
+```
+
+How it works:
+- **A catalog (`src/communities/catalog.ts`)** describes how communities show up in an inbox.
+  - Platform rules: Mobilize groups, Luma calendars and hosts, Slack workspace invites, Discourse, Circle, Meetup, Bevy, Mighty Networks, Skool, Hivebrite, Bettermode, Google Groups.
+  - Known public communities: canonical names, aliases, sub-groups and sending addresses.
+  - No one's membership is stored there, so it can become a shared catalog later.
+- **The scan** searches every Gmail category, including Promotions and Social where community mail usually lands. It reads headers and snippets only, except one email per unknown Mobilize group, whose footer gives the community's name.
+  - It skips mail addressed to a colleague, newsletters, Slack Connect and your own company's workspace.
+- **The ranking** weighs involvement: hosting, speaking, your own posts to a group, and event registrations count far more than digests. Recency and months of activity also count. Sub-groups roll up under their community (BVP → CFO, GTM and the rest).
+- **Confirming** makes the community yours (with your role) across the app.
+
+You can also add communities from two CSV imports:
 
 ```sh
 npm run brain -- import communities members.csv            # community,name,email,linkedin,x,role,provider  (role=me for yourself)

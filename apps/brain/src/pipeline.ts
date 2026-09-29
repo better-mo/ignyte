@@ -16,6 +16,7 @@ import { syncCalendar } from "./sources/google/calendar.ts";
 import { syncContacts } from "./sources/google/contacts.ts";
 import { syncGmail } from "./sources/google/gmail.ts";
 import { syncCommunityDigests } from "./sources/google/communityDigests.ts";
+import { detectCommunities } from "./sources/google/communityDetect.ts";
 
 /** Everything downstream of raw data: people, strength, graph, index. Safe to re-run. */
 export async function rebuild(
@@ -58,7 +59,10 @@ export async function syncGoogle(
     if (parts.includes("contacts")) await syncContacts(account, log);
     if (parts.includes("gmail")) await syncGmail(account, log);
     if (parts.includes("calendar")) await syncCalendar(account, log);
-    if (parts.includes("communities")) await syncCommunityDigests(account, log);
+    if (parts.includes("communities")) {
+      await detectCommunities(account, log);
+      await syncCommunityDigests(account, log);
+    }
   }
   setMeta("last_google_sync_at", new Date().toISOString());
 }

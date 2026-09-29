@@ -10,6 +10,14 @@ import { findCompany } from "../companies/index.ts";
 import { enrichCompanies } from "../companies/enrich.ts";
 import { companyProfile } from "../companies/profile.ts";
 import { communityProfile, listCommunities } from "../communities/profile.ts";
+import {
+  confirmCandidate,
+  dismissCandidate,
+  listCandidates,
+} from "../communities/detect.ts";
+import { listCompanies } from "../companies/profile.ts";
+import { getMeta, setMeta } from "../db/index.ts";
+import { myEvidence } from "../graph/query.ts";
 import { findWarmPaths, getPerson, me } from "../graph/query.ts";
 import { indexDocuments } from "../index/documents.ts";
 import { searchPeople } from "../index/search.ts";
@@ -77,6 +85,59 @@ function graph(limit: number) {
       communities: byPerson.get(n.id) ?? [],
     })),
     edges,
+  };
+}
+
+/** First-run overview: your closest people, warmest companies and top communities. */
+function onboarding() {
+  const self = me();
+  const people = all<PersonRow>(
+    "SELECT * FROM people WHERE is_me = 0 AND hidden = 0 AND strength > 0 ORDER BY strength DESC LIMIT 12",
+  ).map((p) => ({
+    id: p.id,
+    name: p.display_name,
+    headline: p.headline,
+    photo: p.photo_url,
+    tier: p.tier,
+    why: myEvidence(p.id)[0] ?? null,
+  }));
+  // Your own employer isn't a "warm company"; everyone there is a colleague.
+  const mine = new Set(
+    self
+      ? all<{ company_id: string }>(
+          "SELECT company_id FROM employment WHERE person_id = ? AND is_current = 1 AND company_id IS NOT NULL",
+          self.id,
+        ).map((r) => r.company_id)
+      : [],
+  );
+  const companies = listCompanies({ limit: 14, currentOnly: true })
+    .filter((c) => !mine.has(c.id))
+    .slice(0, 10);
+  const known = (name: string) =>
+    get<{ n: number }>(
+      `SELECT COUNT(DISTINCT m.person_id) AS n FROM memberships m JOIN communities c ON c.id = m.community_id
+       JOIN people p ON p.id = m.person_id
+       WHERE (c.name = ? OR c.name LIKE ? || ' · %') AND p.is_me = 0 AND p.hidden = 0 AND p.strength >= 12`,
+      name,
+      name,
+    )?.n ?? 0;
+  const communities = listCandidates(10).map((c) => ({
+    key: c.key,
+    name: c.name,
+    platform: c.platform,
+    role: c.role,
+    status: c.status,
+    community_id: c.community_id,
+    evidence: c.evidence,
+    people_you_know: known(c.name),
+  }));
+  return {
+    me: self ? { name: self.display_name } : null,
+    onboarded: !!getMeta("onboarded_at"),
+    detected_at: getMeta("communities_detected_at") ?? null,
+    people,
+    companies,
+    communities,
   };
 }
 
@@ -183,6 +244,20 @@ export function startServer(port = config.port) {
           indexDocuments();
         }
         return json(res, 200, companyProfile(findCompany(c.id) ?? c));
+      }
+
+      if (p === "/api/onboarding") return json(res, 200, onboarding());
+      if (p === "/api/onboarding/done" && req.method === "POST") {
+        setMeta("onboarded_at", new Date().toISOString());
+        return json(res, 200, { ok: true });
+      }
+      const candMatch = p.match(/^\/api\/community-candidate\/(.+)$/);
+      if (candMatch && req.method === "POST") {
+        const key = decodeURIComponent(candMatch[1]);
+        const body = await readBody(req);
+        if (body.action === "dismiss") dismissCandidate(key);
+        else confirmCandidate(key, body.role || undefined);
+        return json(res, 200, onboarding());
       }
 
       if (p === "/api/communities") return json(res, 200, listCommunities());

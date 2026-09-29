@@ -174,6 +174,24 @@ CREATE TABLE IF NOT EXISTS merges (
   at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Community detection: messages already scanned, what each was evidence for, and the
+-- ranked suggestions you confirm or dismiss during onboarding.
+CREATE TABLE IF NOT EXISTS community_scan (
+  account_id TEXT NOT NULL, message_id TEXT NOT NULL,
+  PRIMARY KEY (account_id, message_id)
+);
+CREATE TABLE IF NOT EXISTS community_signals (
+  account_id TEXT NOT NULL, message_id TEXT NOT NULL, key TEXT NOT NULL, data TEXT NOT NULL,
+  PRIMARY KEY (account_id, message_id, key)
+);
+CREATE TABLE IF NOT EXISTS community_candidates (
+  key TEXT PRIMARY KEY,
+  name TEXT NOT NULL, platform TEXT NOT NULL, type TEXT NOT NULL, url TEXT,
+  score REAL NOT NULL, role TEXT, evidence TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'suggested', community_id TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS people_fts USING fts5(
   person_id UNINDEXED, name, headline, orgs, places, communities, doc,
   tokenize = 'porter unicode61 remove_diacritics 2'

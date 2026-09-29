@@ -13,6 +13,27 @@ import {
   importCommunityMembers,
 } from "./sources/communities.ts";
 import { importLinkedIn } from "./sources/linkedin.ts";
+import { googleAccounts } from "./sources/google/auth.ts";
+import { detectCommunities } from "./sources/google/communityDetect.ts";
+import {
+  confirmCandidate,
+  dismissCandidate,
+  listCandidates,
+} from "./communities/detect.ts";
+
+function printCandidates() {
+  const list = listCandidates(10);
+  if (!list.length) return console.log("No communities detected yet.");
+  console.log("\nYour top communities:");
+  list.forEach((c, i) => {
+    const e = c.evidence;
+    const mark = c.status === "confirmed" ? "✓" : " ";
+    console.log(
+      `${mark} ${String(i + 1).padStart(2)}. ${c.name}${e.groups.length ? ` (${e.groups.join(", ")})` : ""} — ${c.role}, ${e.messages} email${e.messages === 1 ? "" : "s"} over ${e.months} month${e.months === 1 ? "" : "s"}, last ${e.last.slice(0, 10)} [${c.platform}]`,
+    );
+  });
+  console.log("\nConfirm with: communities --confirm <n> [--role host]   Hide with: communities --dismiss <n>");
+}
 import { importVcf } from "./sources/vcard.ts";
 import { importX } from "./sources/x.ts";
 
@@ -26,6 +47,8 @@ Connect & import
   import linkedin <export.zip|folder>
   import x <archive.zip|folder>
   import vcf <contacts.vcf>                       Phone contacts
+  detect-communities [--account <email|label>]    Find your top communities from Gmail (also runs in sync)
+  communities [--confirm <n|key>] [--dismiss <n|key>] [--role host]   Review detected communities
   import communities <members.csv>                community,name,email,linkedin,x,role
   import community-activity <posts.csv>           community,type,author_email,author_name,date,title,body,url,location
 
@@ -131,6 +154,27 @@ async function main() {
     case "rebuild":
       await rebuild(console.log, { embed: !f["no-embed"] });
       break;
+    case "detect-communities": {
+      const accounts = googleAccounts().filter(
+        (a) => typeof f.account !== "string" || a.email === f.account || a.label === f.account,
+      );
+      if (!accounts.length) throw new Error("No Google accounts connected.");
+      for (const a of accounts) await detectCommunities(a);
+      printCandidates();
+      break;
+    }
+    case "communities": {
+      const list = listCandidates(30);
+      const pick = (v: unknown) =>
+        typeof v === "string" ? (list[Number(v) - 1]?.key ?? v) : undefined;
+      const confirm = pick(f.confirm);
+      const dismiss = pick(f.dismiss);
+      if (confirm) confirmCandidate(confirm, typeof f.role === "string" ? f.role : undefined);
+      if (dismiss) dismissCandidate(dismiss);
+      if (confirm || dismiss) await rebuild(console.log, { embed: false });
+      printCandidates();
+      break;
+    }
     case "enrich":
       await enrichPeople({
         limit: f.limit ? Number(f.limit) : undefined,

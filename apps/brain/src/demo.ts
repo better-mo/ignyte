@@ -32,6 +32,41 @@ import {
 import { importLinkedIn } from "./sources/linkedin.ts";
 import { importVcf } from "./sources/vcard.ts";
 import { importX } from "./sources/x.ts";
+import {
+  classifyMessage,
+  contextFromDb,
+  refreshCandidates,
+  resolveMobilizeGroup,
+  saveSignals,
+  type DetectMessage,
+} from "./communities/detect.ts";
+
+/** Fictional community notification emails, run through the real detector. */
+function demoCommunityMail(): DetectMessage[] {
+  const me = { email: "mo@ignyte.dev" };
+  const out: DetectMessage[] = [];
+  const add = (n: number, spacingDays: number, m: Omit<DetectMessage, "id" | "occurredAt" | "to" | "cc"> & Partial<DetectMessage>) => {
+    for (let i = 0; i < n; i++)
+      out.push({
+        to: [me],
+        cc: [],
+        ...m,
+        id: `demo-comm-${out.length}`,
+        occurredAt: new Date(Date.now() - (5 + i * spacingDays) * 864e5).toISOString(),
+      });
+  };
+  add(14, 21, { from: { email: "founders-circle@calendar.luma-mail.com", name: "Founders Circle" }, subject: "Founders Circle: monthly dinner", snippet: "" });
+  add(4, 60, { from: { email: "founders-circle@calendar.luma-mail.com", name: "Founders Circle" }, subject: "You're registered for Founders Circle dinner", snippet: "" });
+  add(1, 30, { from: { email: "usr-demo1@user.luma-mail.com", name: "Priya Sharma" }, subject: "You're hosting: Product Leaders Breakfast", snippet: "Product Leaders Breakfast Hosted by Product Manager Community is tomorrow" });
+  add(9, 25, { from: { email: "notifications@designcollective.discoursemail.com" }, subject: "[Design Collective] Summary", snippet: "" });
+  add(2, 200, { from: { email: "feedback@slack.com" }, subject: "Join CX Leaders on Slack", snippet: "Ava Brooks has invited you to join the Slack workspace CX Leaders." });
+  add(6, 12, { from: { email: "maya.w@members.mobilize.io", name: "Maya Williams" }, to: [], cc: [{ email: "wipproduct@groups.mobilize.io" }], subject: "[Product] Re: Roadmap templates", snippet: "" });
+  add(3, 40, { from: me, to: [{ email: "wipproduct@groups.mobilize.io" }], subject: "[Product] Re: Hiring a first PM", snippet: "" });
+  add(5, 90, { from: { email: "hello@meetup.com", name: "SF Climbing Club" }, subject: "New event: Saturday bouldering", snippet: "" });
+  // Mail to a colleague that lands in your inbox is ignored.
+  add(8, 10, { from: { email: "notifications@growthhackers.discoursemail.com" }, to: [{ email: "dana@ignyte.dev" }], subject: "[Growth Hackers] Summary", snippet: "" });
+  return out;
+}
 
 const FIX = path.join(APP_ROOT, "fixtures");
 const day = 864e5;
@@ -654,6 +689,16 @@ export async function loadDemo(log = console.log) {
       : { status: "no_match" };
   };
   await enrichCompanies({ provider: "fixture", limit: 100 }, log);
+
+  // Community detection, as the Gmail scan would do it.
+  const ctx = contextFromDb();
+  tx(() => {
+    for (const m of demoCommunityMail()) saveSignals(WORK.id, m.id, classifyMessage(m, ctx));
+  });
+  // What reading one digest footer ("You're a member of Women in Product") resolves to.
+  resolveMobilizeGroup("wipproduct", "Women in Product", "Product");
+  const found = refreshCandidates();
+  log(`  communities: detected ${found.length} from demo email`);
   await rebuild(log);
 }
 

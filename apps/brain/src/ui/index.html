@@ -20,6 +20,7 @@
     <div class="shell">
       <nav class="rail" aria-label="Main">
         <div class="brand"><span class="spark"></span>People Brain</div>
+        <button class="nav" data-view="map">Your map</button>
         <button class="nav active" data-view="ask">Ask</button>
         <button class="nav" data-view="people">People</button>
         <button class="nav" data-view="communities">Communities</button>
@@ -29,6 +30,10 @@
       </nav>
 
       <main>
+        <section class="view" id="view-map">
+          <div class="map" id="map"></div>
+        </section>
+
         <section class="view active" id="view-ask">
           <div class="ask">
             <div class="thread-col">

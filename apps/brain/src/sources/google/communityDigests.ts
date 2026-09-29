@@ -135,7 +135,7 @@ export function parseMobilize(input: {
   };
 }
 
-type FullMessage = {
+export type FullMessage = {
   id: string;
   internalDate: string;
   payload: {

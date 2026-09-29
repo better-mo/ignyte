@@ -70,6 +70,7 @@ document.querySelectorAll(".nav").forEach((b) =>
         v.classList.toggle("active", v.id === `view-${b.dataset.view}`),
       );
     if (b.dataset.view === "people") loadPeople();
+    if (b.dataset.view === "map") loadMap();
     if (b.dataset.view === "communities") loadCommunities();
     if (b.dataset.view === "graph") loadGraph();
     if (b.dataset.view === "sources") loadSources();
@@ -286,6 +287,123 @@ const companyLink = (id, name) =>
   id
     ? `<button class="link" data-company="${esc(id)}">${esc(name)}</button>`
     : `<b>${esc(name)}</b>`;
+
+// ---------- your map (onboarding) ----------
+const showView = (v) => document.querySelector(`.nav[data-view="${v}"]`)?.click();
+const ROLE_LABEL = {
+  host: "Host",
+  speaker: "Speaker",
+  "active member": "Active member",
+  attendee: "Attendee",
+  member: "Member",
+  invited: "Invited",
+};
+const monthYear = (iso) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "";
+
+async function loadMap(data) {
+  const el = $("#map");
+  if (!data) {
+    el.innerHTML = `<p class="muted">Loading…</p>`;
+    data = await api("/api/onboarding");
+  }
+  const first = data.me?.name?.split(" ")[0];
+  const community = (c) => {
+    const e = c.evidence;
+    const facts = [
+      e.groups.length ? e.groups.join(", ") : null,
+      `${e.messages} email${e.messages === 1 ? "" : "s"} since ${monthYear(e.first)}`,
+      e.posts ? `you posted ${e.posts}×` : null,
+      e.registrations ? `${e.registrations} event${e.registrations === 1 ? "" : "s"}` : null,
+      c.people_you_know ? `${c.people_you_know} ${c.people_you_know === 1 ? "person" : "people"} you know` : null,
+    ].filter(Boolean);
+    return `<div class="map-comm is-${c.status}" data-key="${esc(c.key)}">
+      <div class="map-comm-main">
+        <button class="link map-comm-name" ${c.community_id ? `data-community="${esc(c.community_id)}"` : "disabled"}>${esc(c.name)}</button>
+        <span class="role-pill">${esc(ROLE_LABEL[c.role] ?? c.role)}</span>
+        <div class="muted small">${esc(facts.join(" · "))}</div>
+        ${e.samples[0] ? `<div class="sample">“${esc(e.samples[0])}”</div>` : ""}
+      </div>
+      <div class="map-comm-actions">
+        ${
+          c.status === "confirmed"
+            ? `<span class="confirmed">✓ Yours</span><button class="icon" data-act="dismiss" title="Not mine">✕</button>`
+            : `<button class="btn small" data-act="confirm">Yes, mine</button><button class="icon" data-act="dismiss" title="Not mine">✕</button>`
+        }
+      </div>
+    </div>`;
+  };
+  el.innerHTML = `
+    <header class="map-head">
+      <h1>${first ? `${esc(first)}, here's` : "Here's"} your network</h1>
+      <p class="muted">Who you're closest to, the companies you have warm access to, and the communities you're part of, all from your own email, calendar and contacts. Check the communities; everything else updates as you sync.</p>
+    </header>
+    <div class="map-cols">
+      <section class="map-col">
+        <h3>Closest people</h3>
+        <div class="map-list">${
+          data.people.length
+            ? data.people
+                .map(
+                  (p) => `<button class="map-row" data-person="${esc(p.id)}">${avatar(p)}<span><b>${esc(p.name)}</b><small>${esc(p.headline || p.why || p.tier || "")}</small></span></button>`,
+                )
+                .join("")
+            : `<p class="muted">Connect a source to see your people.</p>`
+        }</div>
+      </section>
+      <section class="map-col">
+        <h3>Companies you can reach</h3>
+        <div class="map-list">${
+          data.companies.length
+            ? data.companies
+                .map(
+                  (c) => `<button class="map-row" data-company="${esc(c.id)}"><span class="avatar company">${esc(initials(c.name))}</span><span><b>${esc(c.name)}</b><small>${esc([c.best_contact ? `via ${c.best_contact.name}` : null, `${c.current_people} ${c.current_people === 1 ? "person" : "people"}`].filter(Boolean).join(" · "))}</small></span></button>`,
+                )
+                .join("")
+            : `<p class="muted">Companies appear once people's jobs are known (LinkedIn import or enrichment).</p>`
+        }</div>
+      </section>
+      <section class="map-col wide">
+        <h3>Your communities <span class="muted small">detected from your email</span></h3>
+        <div class="map-list">${
+          data.communities.length
+            ? data.communities.map(community).join("")
+            : `<div class="muted">${data.detected_at ? "No communities found in your email yet." : "Not scanned yet. Run:"}<pre>npm run brain -- detect-communities</pre></div>`
+        }</div>
+      </section>
+    </div>
+    <div class="map-foot">
+      <button class="btn primary" id="mapDone">${data.onboarded ? "Back to asking" : "Looks right, start asking"}</button>
+    </div>`;
+  el.querySelectorAll(".map-comm [data-act]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const key = b.closest(".map-comm").dataset.key;
+      b.disabled = true;
+      loadMap(
+        await api(`/api/community-candidate/${encodeURIComponent(key)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: b.dataset.act }),
+        }),
+      );
+    }),
+  );
+  $("#mapDone").addEventListener("click", async () => {
+    await api("/api/onboarding/done", { method: "POST" });
+    showView("ask");
+  });
+}
+
+// First run: open the map instead of an empty chat.
+api("/api/onboarding")
+  .then((d) => {
+    if (!d.onboarded && (d.people.length || d.communities.length)) {
+      showView("map");
+      loadMap(d);
+    }
+  })
+  .catch(() => {});
 
 // ---------- communities ----------
 async function loadCommunities() {
