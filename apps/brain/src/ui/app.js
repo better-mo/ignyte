@@ -70,6 +70,7 @@ document.querySelectorAll(".nav").forEach((b) =>
         v.classList.toggle("active", v.id === `view-${b.dataset.view}`),
       );
     if (b.dataset.view === "people") loadPeople();
+    if (b.dataset.view === "communities") loadCommunities();
     if (b.dataset.view === "graph") loadGraph();
     if (b.dataset.view === "sources") loadSources();
   }),
@@ -273,6 +274,8 @@ function renderCard(card) {
 }
 
 document.addEventListener("click", (e) => {
+  const community = e.target.closest("[data-community]");
+  if (community) return openCommunity(community.dataset.community);
   const company = e.target.closest("[data-company]");
   if (company) return openCompany(company.dataset.company);
   const el = e.target.closest("[data-person]");
@@ -283,6 +286,58 @@ const companyLink = (id, name) =>
   id
     ? `<button class="link" data-company="${esc(id)}">${esc(name)}</button>`
     : `<b>${esc(name)}</b>`;
+
+// ---------- communities ----------
+async function loadCommunities() {
+  const list = $("#communityList");
+  list.innerHTML = `<p class="muted">Loading…</p>`;
+  const rows = await api("/api/communities");
+  if (!rows.length) {
+    list.innerHTML = "";
+    list.insertAdjacentHTML(
+      "beforeend",
+      `<div class="community-empty"><p>No communities yet. Import your list, then pull community digests from Gmail:</p>
+      <pre>npm run brain -- import communities communities.csv
+npm run brain -- sync --only communities
+npm run brain -- rebuild</pre></div>`,
+    );
+    return;
+  }
+  list.innerHTML = rows
+    .map(
+      (c) => `<button class="community-card" data-community="${esc(c.id)}">
+      <b>${esc(c.name)}</b>
+      ${c.my_role ? `<span class="you">You: ${esc(c.my_role)}</span>` : ""}
+      <div class="muted">${c.known} you know · ${c.members} in your network${c.posts ? ` · ${c.posts} post${c.posts === 1 ? "" : "s"}` : ""}${c.last_activity ? ` · active ${ago(c.last_activity)}` : ""}</div>
+      ${c.top.length ? `<div class="faces">${c.top.map((p) => avatar(p)).join("")}</div>` : ""}
+    </button>`,
+    )
+    .join("");
+}
+
+async function openCommunity(id) {
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  $("#drawerBody").innerHTML = `<p class="muted">Loading…</p>`;
+  const c = await api(`/api/community/${encodeURIComponent(id)}`);
+  const section = (title, html) =>
+    html ? `<div class="section"><h4>${title}</h4>${html}</div>` : "";
+  const member = (p) =>
+    `<div><button class="person-chip" data-person="${esc(p.id)}">${avatar(p)}<span><span class="name">${esc(p.name)}</span><br><span class="sub">${esc([p.role, p.headline, p.city].filter(Boolean).join(" · "))}</span></span></button>${p.how_you_know_them.length ? `<small>${esc(p.how_you_know_them.join(" · "))}</small>` : ""}</div>`;
+  const known = c.members.filter((p) => p.strength >= 12);
+  const others = c.members.filter((p) => p.strength < 12);
+  $("#drawerBody").innerHTML = `
+    <div class="profile-head"><span class="avatar company">${esc(initials(c.name))}</span><div><h3>${esc(c.name)}</h3>
+      <div class="muted">${esc([c.provider !== "manual" ? c.provider : null, c.my_role ? `you: ${c.my_role}` : null].filter(Boolean).join(" · "))}</div>
+      <div class="tier">${c.counts.known} you know · ${c.counts.members} in your network</div></div></div>
+    ${c.url ? `<div class="actions"><a class="btn" href="${esc(c.url)}" target="_blank" rel="noreferrer">Open</a></div>` : ""}
+    ${c.description ? `<p class="section">${esc(c.description)}</p>` : ""}
+    ${section("People you know there", known.length ? `<div class="timeline">${known.map(member).join("")}</div>` : `<p class="muted">Nobody you're in touch with yet.</p>`)}
+    ${section("Other members", others.length ? `<div class="timeline">${others.map(member).join("")}</div>` : "")}
+    ${section("Recent activity", c.activity.length ? `<div class="timeline">${c.activity.map((a) => `<div>${esc(a.subject || a.snippet || a.kind)}<small>${a.author ? `${esc(a.author)} · ` : ""}${esc(a.kind.replace("_", " "))} · ${ago(a.occurred_at)}</small></div>`).join("")}</div>` : "")}
+    ${section("Related groups", c.related.length ? `<div class="badges">${c.related.map((r) => `<button class="badge community" data-community="${esc(r.id)}">${esc(r.name)}</button>`).join("")}</div>` : "")}
+  `;
+}
 
 // ---------- company drawer ----------
 async function openCompany(id) {
@@ -394,7 +449,7 @@ function renderPerson(p) {
     ${section("How you know them", list(p.how_you_know_them.map(esc)))}
     ${section("Career", list(p.career.map((j) => `${esc(j.title ?? "")}${j.title ? " at " : ""}${companyLink(j.company_id, j.company)}${j.industry ? ` <span class="muted">· ${esc(j.industry)}</span>` : ""}${j.start_date ? ` <span class="muted">${esc(j.start_date.slice(0, 4))}–${j.is_current ? "now" : esc(j.end_date?.slice(0, 4) ?? "?")}</span>` : ""}`)))}
     ${section("Education", list(p.education.map((s) => `${esc(s.school)}${s.degree ? ` <span class="muted">${esc(s.degree)}</span>` : ""}`)))}
-    ${section("Communities", p.communities.length ? badges(p.communities.map((c) => (p.shared_communities_with_you.includes(c) ? `${c} (you too)` : c))) : "")}
+    ${section("Communities", p.communities.length ? `<div class="badges">${p.communities.map((c) => `<button class="badge community" data-community="${esc(c)}">${esc(p.shared_communities_with_you.includes(c) ? `${c} (you too)` : c)}</button>`).join("")}</div>` : "")}
     ${section("Knows in your network", p.knows.length ? `<div class="timeline">${p.knows.map((k) => `<div><button class="person-chip" data-person="${esc(k.id)}"><span class="name">${esc(k.name)}</span></button><small>${esc(k.evidence.join(" · "))}</small></div>`).join("")}</div>` : "")}
     ${section("Recent", p.recent_interactions.length ? `<div class="timeline">${p.recent_interactions.map((i) => `<div>${esc(i.subject || i.snippet || i.kind)}<small>${esc(i.kind.replace("_", " "))} · ${esc(i.source)}${i.community ? ` · ${esc(i.community)}` : ""} · ${ago(i.occurred_at)}</small></div>`).join("")}</div>` : "")}
     ${p.summary ? section("About", `<p>${esc(p.summary)}</p>`) : ""}

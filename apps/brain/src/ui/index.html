@@ -22,6 +22,7 @@
         <div class="brand"><span class="spark"></span>People Brain</div>
         <button class="nav active" data-view="ask">Ask</button>
         <button class="nav" data-view="people">People</button>
+        <button class="nav" data-view="communities">Communities</button>
         <button class="nav" data-view="graph">Graph</button>
         <button class="nav" data-view="sources">Sources</button>
         <div class="rail-foot" id="railFoot"></div>
@@ -73,6 +74,17 @@
           <div class="people-more muted" id="peopleMore">
             <span id="peopleCount"></span>
           </div>
+        </section>
+
+        <section class="view" id="view-communities">
+          <header class="view-head">
+            <h2>Communities</h2>
+            <p class="muted">
+              Communities you're part of, and who in your network is there
+              too. Open one to see members, strongest ties first.
+            </p>
+          </header>
+          <div class="community-list" id="communityList"></div>
         </section>
 
         <section class="view" id="view-graph">

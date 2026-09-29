@@ -9,6 +9,7 @@ import { enrichPeople } from "../enrich/index.ts";
 import { findCompany } from "../companies/index.ts";
 import { enrichCompanies } from "../companies/enrich.ts";
 import { companyProfile } from "../companies/profile.ts";
+import { communityProfile, listCommunities } from "../communities/profile.ts";
 import { findWarmPaths, getPerson, me } from "../graph/query.ts";
 import { indexDocuments } from "../index/documents.ts";
 import { searchPeople } from "../index/search.ts";
@@ -175,6 +176,14 @@ export function startServer(port = config.port) {
           indexDocuments();
         }
         return json(res, 200, companyProfile(findCompany(c.id) ?? c));
+      }
+
+      if (p === "/api/communities") return json(res, 200, listCommunities());
+
+      const communityMatch = p.match(/^\/api\/community\/([^/]+)$/);
+      if (communityMatch) {
+        const c = communityProfile(decodeURIComponent(communityMatch[1]));
+        return c ? json(res, 200, c) : json(res, 404, { error: "not found" });
       }
 
       if (p === "/api/graph")
