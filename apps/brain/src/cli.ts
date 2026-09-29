@@ -41,37 +41,37 @@ const HELP = `People Brain — your network, resolved, enriched and queryable by
 
 Data: ${config.dataDir}
 
-Connect & import
+Set up
   connect google <label> [--hint you@gmail.com]   Sign in to a Google account (repeat per account)
   sync [--account <email|label>] [--only gmail,contacts,calendar,communities]
   import linkedin <export.zip|folder>
-  import x <archive.zip|folder>
-  import vcf <contacts.vcf>                       Phone contacts
-  detect-communities [--account <email|label>]    Find your top communities from Gmail (also runs in sync)
-  communities [--confirm <n|key>] [--dismiss <n|key>] [--role host]   Review detected communities
-  import communities <members.csv>                community,name,email,linkedin,x,role
-  import community-activity <posts.csv>           community,type,author_email,author_name,date,title,body,url,location
-
-Build
-  rebuild [--no-embed]                            Resolve identities, score, graph, index (runs after imports)
-  enrich [--limit 25] [--min-strength 10] [--provider pdl|apollo] [--person <id>] [--force]
-  enrich-companies [--limit 25] [--company <name>] [--force]  Industry, size, HQ for companies you know people at
 
 Use
-  serve [--port 4321]                             Local web app: chat, people, graph
-  ask "<question>"                                One-shot question to Claude
+  serve [--port 4321]                             Web app: Your map, Ask, People, Communities, Graph
+  ask "<question>"                                One question to Claude
   chat                                            Terminal chat
-  mcp                                             MCP server (stdio) for Claude Desktop / Claude Code
+  communities [--confirm <n>] [--dismiss <n>] [--role host]   Review your detected communities
   search "<query>" [--city X] [--company X] [--community X]
   person <id|name>
   paths <company>
   company <name|domain>
-  companies [--industry X] [--city X]            Companies where you know people, warmest first
   stats
 
-Fix
+Maintain
+  rebuild                                         Recompute everything (runs after sync and imports)
   merge <keep-id> <merge-id>                      Merge two people
-  company-alias <alias> <company>                 e.g. company-alias "Square" "Block" (merges if both exist)
+  company-alias <alias> <company>                 e.g. company-alias "Square" "Block"
+
+Optional (see docs/advanced.md)
+  import vcf <contacts.vcf>                       Phone contacts
+  import x <archive.zip|folder>
+  import communities <members.csv>                community,name,email,linkedin,x,role
+  import community-activity <posts.csv>
+  detect-communities [--account <email|label>]    Re-scan Gmail for communities (sync does this)
+  enrich [--limit 25] [--min-strength 35] [--person <id>]   Needs PDL_API_KEY or APOLLO_API_KEY
+  enrich-companies [--limit 25] [--company <name>]
+  companies [--industry X] [--city X]
+  mcp                                             MCP server for Claude Desktop / Claude Code
 `;
 
 function flags(args: string[]) {

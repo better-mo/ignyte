@@ -484,7 +484,7 @@ function renderCompany(c) {
     <div class="actions">
       ${c.domain ? `<a class="btn" href="https://${esc(c.domain)}" target="_blank" rel="noreferrer">${esc(c.domain)}</a>` : ""}
       ${c.linkedin ? `<a class="btn" href="${esc(c.linkedin)}" target="_blank" rel="noreferrer">LinkedIn</a>` : ""}
-      <button class="btn" data-act="enrich">${c.enriched ? "Refresh company data" : "Enrich company"}</button>
+      <button class="btn enrich-only" data-act="enrich">${c.enriched ? "Refresh company data" : "Enrich company"}</button>
     </div>
     ${c.description ? `<p class="section">${esc(c.description)}</p>` : ""}
     ${section(
@@ -561,7 +561,7 @@ function renderPerson(p) {
     <div class="actions">
       ${p.linkedin ? `<a class="btn" href="${esc(p.linkedin)}" target="_blank" rel="noreferrer">LinkedIn</a>` : ""}
       ${p.x ? `<a class="btn" href="https://x.com/${esc(p.x.slice(1))}" target="_blank" rel="noreferrer">${esc(p.x)}</a>` : ""}
-      <button class="btn" data-act="enrich">Enrich profile</button>
+      <button class="btn enrich-only" data-act="enrich">Enrich profile</button>
       <button class="btn" data-act="hide">Hide</button>
     </div>
     ${section("How you know them", list(p.how_you_know_them.map(esc)))}
@@ -1010,10 +1010,10 @@ async function loadSources() {
       "npm run brain -- connect google Work\nnpm run brain -- connect google Personal\nnpm run brain -- sync",
     )}
     ${block("LinkedIn", acct("linkedin").length ? `${count("linkedin")} people · ${state(acct("linkedin")[0])}` : "Not imported.", "npm run brain -- import linkedin ~/Downloads/Basic_LinkedInDataExport.zip")}
-    ${block("X", acct("x").length ? `${esc(acct("x")[0].label)} · ${count("x")} people · ${state(acct("x")[0])}` : "Not imported.", "npm run brain -- import x ~/Downloads/twitter-archive.zip")}
-    ${block("Phone contacts", acct("phone").length ? `${count("phone")} people · ${state(acct("phone")[0])}` : "Not imported.", "npm run brain -- import vcf ~/Downloads/contacts.vcf")}
-    ${block("Communities", o.communities.length ? o.communities.map((c) => `${esc(c.name)} (${c.members})`).join(", ") : "None yet.", "npm run brain -- import communities members.csv\nnpm run brain -- import community-activity posts.csv")}
-    ${block("Enrichment", `${o.enriched ?? 0} profiles enriched`, "npm run brain -- enrich --limit 25")}
+    ${acct("x").length ? block("X", `${esc(acct("x")[0].label)} · ${count("x")} people · ${state(acct("x")[0])}`, "npm run brain -- import x ~/Downloads/twitter-archive.zip") : ""}
+    ${acct("phone").length ? block("Phone contacts", `${count("phone")} people · ${state(acct("phone")[0])}`, "npm run brain -- import vcf ~/Downloads/contacts.vcf") : ""}
+    ${block("Communities", o.communities.length ? `Detected from your email: ${o.communities.slice(0, 6).map((c) => esc(c.name)).join(", ")}. Review them in Your map.` : "Detected from your email when you sync.", "npm run brain -- communities")}
+    ${o.enriched ? block("Enrichment", `${o.enriched} profiles enriched`, "npm run brain -- enrich --limit 25") : ""}
     <div class="source" id="filtered"></div>
   `;
   loadFiltered();
@@ -1021,6 +1021,8 @@ async function loadSources() {
 
 // ---------- boot ----------
 api("/api/status").then((s) => {
+  // Enrichment is optional: its buttons only appear once a provider key is set.
+  document.body.classList.toggle("no-enrichment", !s.hasEnrichment);
   $("#railFoot").innerHTML =
     `${s.people} people<br>${esc(s.model)}${s.hasAnthropicKey ? "" : '<br><span class="error">ANTHROPIC_API_KEY not set</span>'}`;
 });

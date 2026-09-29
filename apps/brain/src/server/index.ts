@@ -342,6 +342,7 @@ export function startServer(port = config.port) {
           people:
             get("SELECT COUNT(*) AS n FROM people WHERE is_me = 0")?.n ?? 0,
           model: config.anthropicModel,
+          hasEnrichment: !!(config.enrichment.pdlKey || config.enrichment.apolloKey),
         });
       }
 

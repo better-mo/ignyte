@@ -1104,3 +1104,7 @@ button.icon:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.no-enrichment .enrich-only {
+  display: none;
+}
